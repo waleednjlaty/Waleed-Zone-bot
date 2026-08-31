@@ -1,12 +1,12 @@
 from aiogram.types import CallbackQuery , Message
 from aiogram import Bot
 from typing import Union
-from app.config import get_settings
+from config import settings
 from app.services.subscription import is_subscribed
 
 
 async def require_subscription(event:Union[Message,CallbackQuery],bot:Bot) ->bool:
-    settings =get_settings()
+   
     user_id =event.from_user.id
     if await is_subscribed(bot,user_id,settings.CHANNEL_USERNAME):
         return True
