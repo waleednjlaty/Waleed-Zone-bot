@@ -141,7 +141,7 @@ async def on_upload_start(
         inline_keyboard=[
             [InlineKeyboardButton(text="📁 رفع ملف من تيليجرام", callback_data="upl:method_file")],
             [InlineKeyboardButton(text="🌐 تحميل ريموتلي مباشر", callback_data="upl:method_remote")],
-            [InlineKeyboardButton(text="🔗 اختصار رابط مباشر (Shrink Only)", callback_data="upl:method_shrink")],
+            [InlineKeyboardButton(text="🔗 تحميل لعبة وتوليد ريكوست ", callback_data="upl:method_Game")],
             [InlineKeyboardButton(text="❌ إلغاء", callback_data=MainMenuCB(action="main").pack())]
         ]
     )
@@ -174,13 +174,13 @@ async def on_method_remote(call: CallbackQuery, state: FSMContext) -> None:
     )
 
 
-@router.callback_query(F.data == "upl:method_shrink")
-async def on_method_shrink(call: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data == "upl:method_Game")
+async def on_method_Game(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     await state.set_state(UploadStates.waiting_shrink_only_url)
     await state.update_data(manual=True)
     await call.message.edit_text(
-        "🔗 أرسل **رابط التحميل المباشر** لتقصيره عبر ShrinkMe فقط دون رفع:\n\n"
+        "🔗 ارسل رابط اللعبة التي تريد رفعها \n\n"
         "بعد الاختصار، سيكمل البوت معك خطوات النشر كالعادة.",
         reply_markup=cancel_keyboard(),
     )
