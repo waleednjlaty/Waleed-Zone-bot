@@ -39,8 +39,8 @@ HELP_TEXT = (
     "────────\n"
     "📱 التطبيقات — تصفح التطبيقات حسب التصنيف\n"
     "🔎 بحث عن تطبيق — ابحث عن أي تطبيق بالاسم\n"
-    "🆕 أحدث التطبيقات — أحدث ما أُضيف\n"
-#    "📥 طلب تطبيق — اطلب تطبيقًا ليتم إضافته\n"
+#    "🆕 أحدث التطبيقات — أحدث ما أُضيف\n"
+    "📥 طلب تطبيق — اطلب تطبيقًا ليتم إضافته\n"
     "📢 القناة / 💬 المجموعة — روابطنا\n\n"
     "🔔 لتفعيل إشعارات التطبيقات الجديدة افتح أي تطبيق "
     "واضغط على زر الإشعارات."
@@ -80,21 +80,6 @@ async def on_start(message: Message, session: AsyncSession) -> None:
     )
 
 
-# 👈 هذا هو الأمر السري لسحب قاعدة البيانات قبل حذفها
-@router.message(Command("get_db"))
-async def backup_database(message: Message):
-    """إرسال نسخة من قاعدة البيانات للمدير فقط"""
-    if not is_admin(message.from_user.id):
-        return  # تجاهل الأمر تماماً إذا لم يكن المستخدم مشرفاً
-    
-    try:
-        db_file = FSInputFile("/tmp/bot.db")
-        await message.reply_document(
-            document=db_file, 
-            caption="📦 تفضل، هذه نسخة كاملة من قاعدة بيانات البوت الحالية!"
-        )
-    except Exception as e:
-        await message.reply(f"❌ حدث خطأ أثناء سحب الملف (قد يكون الملف غير موجود أو المسار مختلف): {e}")
 
 
 @router.callback_query(MainMenuCB.filter(F.action == "main"))
