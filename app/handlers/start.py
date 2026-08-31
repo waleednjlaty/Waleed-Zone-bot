@@ -48,7 +48,7 @@ HELP_TEXT = (
 
 
 @router.message(CommandStart(), F.chat.type == "private")
-async def on_start(message: Message, session: AsyncSession) -> None:
+async def on_start(message: Message, session: AsyncSession,bot:Bot) -> None:
     if not await require_subscription(message,bot):
         return
     """بداية البوت — يدعم deep link: t.me/BOT?start=app_123"""
