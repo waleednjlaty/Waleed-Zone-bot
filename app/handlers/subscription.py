@@ -1,16 +1,18 @@
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery , Message
 from aiogram import Bot
-
+from typing import Union
 from app.config import get_settings
 from app.services.subscription import is_subscribed
 
 
-async def require_subscription(call: CallbackQuery,bot:Bot) ->bool:
+async def require_subscription(event:Union[Message,CallbackQuery],bot:Bot) ->bool:
     settings =get_settings()
-    if await is_subscribed(bot,call.from_user.id,settings.CHANNEL_USERNAME):
+    user_id =event.from_user.id
+    if await is_subscribed(bot,user_id,settings.CHANNEL_USERNAME):
         return True
-        await call.answer(
-            "الرجاء الاشتراك بلقناة قبل استخدام البوت 🔔",
-            show_alert=True
-        )
+        text =   "الرجاء الاشتراك بلقناة قبل استخدام البوت 🔔"
+        if isinstance(event,CallbackQuery):
+            await event.answer(text,show_alert=True)
+        else:
+            await event.answer(text)
         return False
