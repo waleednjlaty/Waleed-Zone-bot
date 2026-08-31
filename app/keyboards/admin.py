@@ -12,6 +12,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
     kb = [
         [InlineKeyboardButton(text="📊 الإحصائيات", callback_data=AdminCB(action="stats", page=0).pack())],
         [InlineKeyboardButton(text="🚀 رفع تطبيق", callback_data=AppCB(action="upload", app_id=0).pack())],
+        [InlineKeyboardButton(text="🎮 إضافة لعبة (SteamRIP)", callback_data=AdminCB(action="add_rip_game", page=0).pack())],
         [InlineKeyboardButton(text="📱 إدارة التطبيقات", callback_data=AdminCB(action="apps", page=0).pack())],
         [InlineKeyboardButton(text="📥 طلبات التطبيقات", callback_data=AdminCB(action="requests", page=0).pack())],
         [InlineKeyboardButton(text="📢 نشر في القناة", callback_data=AdminCB(action="publish_select", page=0).pack())],
@@ -44,6 +45,7 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     kb.append(
         [
             InlineKeyboardButton(text="➕ إضافة تطبيق", callback_data=AdminCB(action="add_app", page=0).pack()),
+            InlineKeyboardButton(text="🎮 إضافة لعبة SteamRIP", callback_data=AdminCB(action="add_rip_game", page=0).pack()),
         ]
     )
     kb.append(
@@ -201,7 +203,7 @@ def banned_words_keyboard(words: list[str]) -> InlineKeyboardMarkup:
             ]
         )
     kb.append([InlineKeyboardButton(text="➕ إضافة كلمة", callback_data=AdminCB(action="bw_add", page=0).pack())])
-    kb.append([InlineKeyboardButton(text="🔙 إدارة الجروب", callback_data=AdminCB(action="group", page=0).pack())])
+    kb.append([InlineKeyboardButton(text="🔙 إدارة الجروب", callback_data=AdminCB(action="group", page=0).pack())],)
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
