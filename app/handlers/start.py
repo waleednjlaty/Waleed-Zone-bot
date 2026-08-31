@@ -8,7 +8,7 @@ from aiogram import Bot, F, Router
 from aiogram.filters import CommandStart, Command  # تمت إضافة Command هنا
 from aiogram.types import CallbackQuery, Message, FSInputFile  # تمت إضافة FSInputFile هنا
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.handlers.subscription import require_subscription
 from app.handlers.common import show_app
 from app.keyboards.admin import admin_panel_keyboard
 from app.keyboards.user import (
