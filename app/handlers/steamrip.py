@@ -1,0 +1,118 @@
+﻿"""معالجات التحميل اللحظي والنشر السريع لألعاب SteamRIP."""
+
+from __future__ import annotations
+
+import logging
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, Message
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from integrations.steamrip_extractor import fetch_game_data
+from app.keyboards.steamrip import build_dynamic_servers_keyboard
+from app.keyboards.user import cancel_keyboard
+from app.utils.helpers import is_admin, escape_html, build_search_text
+from app.utils.constants import AdminCB
+from database import repositories as repo
+
+logger = logging.getLogger(__name__)
+
+router = Router(name="steamrip")
+
+
+@router.callback_query(F.data.startswith("rip_dl:") | F.data.startswith("rip_refresh:"))
+async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> None:
+    app_id = int(call.data.split(":")[1])
+    
+    app = await repo.get_application(session, app_id)
+    if not app or not app.devupload_url:
+        await call.answer("❌ لم يتم العثور على رابط المصدر.", show_alert=True)
+        return
+
+    await call.answer("⏳ جاري توليد روابط تحميل جديدة...")
+
+    try:
+        game_data = await fetch_game_data(app.devupload_url)
+        servers = game_data.get("servers", {})
+        
+        if not servers:
+            await call.message.answer("⚠️ السيرفرات قيد التحديث في المصدر حالياً، يرجى إعادة المحاولة بعد قليل.")
+            return
+
+        reply_markup = build_dynamic_servers_keyboard(servers, app_id)
+        
+        caption = (
+            f"🎮 **{escape_html(app.name)}**\n"
+            f"💾 **الحجم:** {escape_html(app.size or game_data.get('size') or '—')}\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"⚡ تم استخراج أحدث روابط السيرفرات المباشرة:\n"
+            f"👇 اضغط على السيرفر المناسب لبدء التحميل فوراً:"
+        )
+
+        await call.message.answer(caption, reply_markup=reply_markup)
+
+    except Exception as exc:
+        logger.error("Live scrape failed: %s", exc)
+        await call.message.answer(f"❌ تعذر جلب الروابط: {escape_html(str(exc))}")
+
+
+@router.callback_query(AdminCB.filter(F.action == "add_rip_game"))
+async def on_add_rip_game_btn(call: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    await call.answer()
+    from app.states import UploadStates
+    await state.set_state(UploadStates.waiting_remote_url)
+    await call.message.edit_text(
+        "🎮 **إضافة لعبة من SteamRIP**\n\n"
+        "أرسل رابط صفحة اللعبة من موقع SteamRIP الآن:\n"
+        "*(مثال: `https://steamrip.com/game-name-free-download/`)*",
+        reply_markup=cancel_keyboard()
+    )
+
+
+@router.message(Command("rip"))
+async def on_quick_publish_rip(message: Message, session: AsyncSession) -> None:
+    if not is_admin(message.from_user.id):
+        return
+
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2 or not args[1].startswith("http"):
+        await message.reply("⚠️ **طريقة الاستخدام:**\n`/rip https://steamrip.com/game-name-free-download/`")
+        return
+
+    page_url = args[1].strip()
+    status_msg = await message.reply("⏳ جاري سحب بيانات اللعبة وصورتها من SteamRIP...")
+
+    try:
+        game = await fetch_game_data(page_url)
+        
+        app = await repo.create_application(
+            session,
+            name=game["title"],
+            description=f"تحميل لعبة {game['title']} كاملة ومجانية من سيرفرات سريعة.",
+            version="Latest",
+            size=game["size"],
+            category="Games",
+            platform="Windows",
+            image_url=game["image_url"],
+            devupload_url=page_url,
+            published=True,
+            active=True,
+            search_text=build_search_text(game["title"], "Games", "Windows", game["title"])
+        )
+        await session.commit()
+
+        await status_msg.edit_text(
+            f"✅ **تمت إضافة اللعبة إلى البوت بنجاح!**\n\n"
+            f"🎮 الاسم: `{game['title']}`\n"
+            f"💾 الحجم: `{game['size']}`\n"
+            f"🆔 ID التطبيق: `{app.id}`\n\n"
+            f"💡 الروابط ستتولد لحظياً للمستخدمين عند ضغط زر التحميل."
+        )
+
+    except Exception as exc:
+        logger.error("RIP publish error: %s", exc)
+        await status_msg.edit_text(f"❌ فشل جلب بيانات اللعبة:\n`{escape_html(str(exc))}`")
