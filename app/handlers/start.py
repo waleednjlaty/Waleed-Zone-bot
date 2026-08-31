@@ -49,6 +49,8 @@ HELP_TEXT = (
 
 @router.message(CommandStart(), F.chat.type == "private")
 async def on_start(message: Message, session: AsyncSession) -> None:
+    if not await require_subscription(call,bot):
+        return
     """بداية البوت — يدعم deep link: t.me/BOT?start=app_123"""
     user = message.from_user
     if user is None:
@@ -78,8 +80,6 @@ async def on_start(message: Message, session: AsyncSession) -> None:
         WELCOME_TEXT,
         reply_markup=main_menu_keyboard(is_admin_user=is_admin(user.id)),
     )
-
-
 
 
 @router.callback_query(MainMenuCB.filter(F.action == "main"))
