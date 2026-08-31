@@ -84,12 +84,12 @@ async def on_start(message: Message, session: AsyncSession,bot:Bot) -> None:
 
 
 @router.callback_query(MainMenuCB.filter(F.action == "main"))
-async def on_main_menu(call: CallbackQuery) -> None:
-      if not await require_subscription(call,bot):
+async def on_main_menu(call: CallbackQuery, bot: Bot) -> None:
+    if not await require_subscription(call, bot):
         return
-        
-        await call.answer()
-        await call.message.answer(
+
+    await call.answer()
+    await call.message.answer(
         WELCOME_TEXT,
         reply_markup=main_menu_keyboard(is_admin_user=is_admin(call.from_user.id)),
     )
