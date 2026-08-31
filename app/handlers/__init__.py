@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram import Dispatcher
 
-from app.handlers.steamrip import router as steamrip_router
+from .steamrip import router as steamrip_router
 
 from app.handlers import (
     admin,

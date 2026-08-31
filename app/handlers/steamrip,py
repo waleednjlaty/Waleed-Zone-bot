@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 router = Router(name="steamrip")
 
 
-# -------------------------------------------------- 1. زر جلب الروابط اللحظية للمستخدم
 @router.callback_query(F.data.startswith("rip_dl:") | F.data.startswith("rip_refresh:"))
 async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> None:
     app_id = int(call.data.split(":")[1])
@@ -58,14 +57,13 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
         await call.message.answer(f"❌ تعذر جلب الروابط: {escape_html(str(exc))}")
 
 
-# -------------------------------------------------- 2. زر إضافة لعبة عبر لوحة الأدمن
 @router.callback_query(AdminCB.filter(F.action == "add_rip_game"))
 async def on_add_rip_game_btn(call: CallbackQuery, state: FSMContext) -> None:
     if not is_admin(call.from_user.id):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
     await call.answer()
-    from app.states import UploadStates  # أو الحالة المناسبة لديك
+    from app.states import UploadStates
     await state.set_state(UploadStates.waiting_remote_url)
     await call.message.edit_text(
         "🎮 **إضافة لعبة من SteamRIP**\n\n"
@@ -75,7 +73,6 @@ async def on_add_rip_game_btn(call: CallbackQuery, state: FSMContext) -> None:
     )
 
 
-# -------------------------------------------------- 3. أمر مباشر للأدمن (/rip)
 @router.message(Command("rip"))
 async def on_quick_publish_rip(message: Message, session: AsyncSession) -> None:
     if not is_admin(message.from_user.id):
