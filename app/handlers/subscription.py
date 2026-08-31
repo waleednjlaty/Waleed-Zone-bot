@@ -2,7 +2,7 @@ from aiogram.types import CallbackQuery , Message
 from aiogram import Bot
 from typing import Union
 from config import settings
-from app.services.subscription import is_subscribed
+from app.middlewares import is_subscribed
 
 
 async def require_subscription(event:Union[Message,CallbackQuery],bot:Bot) ->bool:
