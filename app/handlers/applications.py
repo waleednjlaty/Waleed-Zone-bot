@@ -21,6 +21,7 @@ from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB, MainMenuCB
 from app.utils.helpers import paginate
 from app.utils.text import app_card, escape_html
 from database import repositories as repo
+from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link
 
 logger = logging.getLogger(__name__)
 
@@ -114,27 +115,97 @@ async def on_download(
         await call.answer("❌ التطبيق غير متوفر.", show_alert=True)
         return
 
-    url = app.shrankme_url or app.devupload_url
+    await call.answer("⏳ جاري تجهيز رابط التحميل...")
+
+    url: str | None = None
+    status_msg = None
+
+    # رابط مخصص محفوظ من الإدارة له الأولوية.
+    if app.shrankme_url:
+        url = app.shrankme_url
+
+    # ألعاب SteamRIP: نولّد الرابط المباشر لحظياً عند كل ضغطة.
+    elif app.devupload_url and "steamrip.com" in app.devupload_url.lower():
+        status_msg = await call.message.answer(
+            "🔎 جاري البحث عن سيرفر BZZHR وتجهيز رابط التحميل المباشر..."
+        )
+        try:
+            game_data = await fetch_game_data(app.devupload_url)
+            servers = game_data.get("servers", {})
+
+            bzzhr_url = next(
+                (
+                    server_url
+                    for server_name, server_url in servers.items()
+                    if (
+                        "bzzhr" in server_name.lower()
+                        or "buzzheavier" in server_name.lower()
+                        or "bzzhr" in server_url.lower()
+                        or "buzzheavier" in server_url.lower()
+                    )
+                ),
+                None,
+            )
+
+            if not bzzhr_url:
+                await status_msg.edit_text(
+                    "❌ لم يتم العثور على سيرفر BZZHR / Buzzheavier لهذه اللعبة."
+                )
+                return
+
+            url = await extract_bzzhr_direct_link(bzzhr_url)
+
+            if not url:
+                await status_msg.edit_text(
+                    "❌ تم العثور على BZZHR، لكن تعذر توليد رابط التحميل المباشر."
+                )
+                return
+
+        except Exception:
+            logger.exception(
+                "SteamRIP direct download failed: %s",
+                app.devupload_url,
+            )
+            await status_msg.edit_text(
+                "❌ حدث خطأ أثناء تجهيز رابط التحميل المباشر."
+            )
+            return
+
+    # التطبيقات العادية تبقى على السلوك السابق.
+    else:
+        url = app.devupload_url
+
     if not url:
-        await call.answer("⚠️ لا يوجد رابط تحميل لهذا التطبيق.", show_alert=True)
+        if status_msg:
+            await status_msg.edit_text("⚠️ لا يوجد رابط تحميل لهذا التطبيق.")
+        else:
+            await call.message.answer("⚠️ لا يوجد رابط تحميل لهذا التطبيق.")
         return
 
     await repo.increment_downloads(session, app.id)
     await repo.add_download(session, call.from_user.id, app.id)
-    await call.answer("⬇️ جاري تجهيز رابط التحميل...")
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 رابط التحميل", url=url)],
-            [InlineKeyboardButton(text="🏠 القائمة", callback_data=MainMenuCB(action="main").pack())],
+            [InlineKeyboardButton(text="📥 رابط التحميل", url=url)],
+            [
+                InlineKeyboardButton(
+                    text="🏠 القائمة",
+                    callback_data=MainMenuCB(action="main").pack(),
+                )
+            ],
         ]
     )
     text = (
-        f"⬇️ رابط تحميل {escape_html(app.name)}:\n"
-        f"{url}\n\n"
-        "اضغط على الزر للفتح، أو حدد الرابط وانسخه."
+        f"⬇️ رابط تحميل {escape_html(app.name)}\n\n"
+        "✅ الرابط المباشر جاهز.\n"
+        "اضغط على «📥 رابط التحميل» لبدء التنزيل من المتصفح."
     )
-    await call.message.answer(text, reply_markup=kb)
+
+    if status_msg:
+        await status_msg.edit_text(text, reply_markup=kb)
+    else:
+        await call.message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(AppCB.filter(F.action.in_({"fav", "unfav"})))
