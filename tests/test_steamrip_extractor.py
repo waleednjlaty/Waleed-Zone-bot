@@ -127,3 +127,65 @@ def test_game_image_falls_back_to_open_graph_image():
     assert _extract_game_image(soup, "https://steamrip.com/example/") == (
         "https://cdn.example.com/game.jpg"
     )
+
+
+def test_game_image_prefers_cover_over_screenshot_gallery():
+    html = """
+    <html>
+      <head>
+        <meta property="og:image" content="https://cdn.example.com/backrooms-cover.jpg">
+      </head>
+      <body>
+        <article>
+          <div class="entry-content">
+            <h2>SCREENSHOTS</h2>
+            <div class="wp-block-gallery screenshots">
+              <img src="https://cdn.example.com/screenshot-1.jpg">
+              <img src="https://cdn.example.com/screenshot-2.jpg">
+            </div>
+          </div>
+        </article>
+      </body>
+    </html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    assert _extract_game_image(soup, "https://steamrip.com/backrooms/") == (
+        "https://cdn.example.com/backrooms-cover.jpg"
+    )
+
+
+def test_game_image_prefers_wordpress_featured_image_before_content_images():
+    html = """
+    <article>
+      <div class="post-thumbnail">
+        <img
+          class="wp-post-image"
+          src="data:image/png;base64,placeholder"
+          data-lazy-src="https://cdn.example.com/hero.webp"
+        >
+      </div>
+      <div class="entry-content">
+        <img src="https://cdn.example.com/content-image.jpg">
+      </div>
+    </article>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    assert _extract_game_image(soup, "https://steamrip.com/example/") == (
+        "https://cdn.example.com/hero.webp"
+    )
+
+
+def test_game_image_does_not_use_images_after_screenshots_heading():
+    html = """
+    <article>
+      <div class="entry-content">
+        <h2>SCREENSHOTS</h2>
+        <img src="https://cdn.example.com/screenshot-only.jpg">
+      </div>
+    </article>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    assert _extract_game_image(soup, "https://steamrip.com/example/") is None
