@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     HTTP_MAX_RETRIES: int = 3
     DOWNLOAD_DIR: Path = BASE_DIR / "tmp" / "uploads"
 
-    WEBSITE_STATS_URL: str | None = None
+    WEBSITE_STATS_URL: str = "https://waleed-zone.up.railway.app/api/stats"
     WEBSITE_STATS_TOKEN: str | None = None
 
     @property
