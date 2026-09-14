@@ -31,11 +31,10 @@
 ### 1. تنزيل المشروع
 
 ```bash
-git clone https://github.com/waleednjlaty/waleed-zone-bot.git
-cd waleed-zone-bot
+git clone https://github.com/waleednjlaty/MyTelegramBot.git
+cd MyTelegramBot
 ```
 
-إذا لم تتم إعادة تسمية الريبو بعد، استخدم `MyTelegramBot` بدل `waleed-zone-bot`.
 
 ### 2. إنشاء البيئة الافتراضية
 
