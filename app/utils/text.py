@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from database.models import Application
 
+from .catalog import PC_GAME_CATEGORY, display_category
 from .helpers import format_size, human_time
 
 
@@ -19,8 +20,11 @@ def escape_html(text: str | None) -> str:
 
 def app_card(app: Application, *, short: bool = False) -> str:
     """بطاقة تطبيق كاملة للمستخدم."""
+    category = display_category(app.category, app.platform)
+    is_pc_game = category == PC_GAME_CATEGORY
+
     lines = [
-        f"📱 {escape_html(app.name)}",
+        f"{'🖥️' if is_pc_game else '📱'} {escape_html(app.name)}",
         "",
     ]
     if app.version:
@@ -28,15 +32,16 @@ def app_card(app: Application, *, short: bool = False) -> str:
     if app.size:
         lines.append(f"💾 الحجم: {escape_html(app.size)}")
     if app.platform:
-        lines.append(f"📱 النظام: {escape_html(app.platform)}")
-    if app.category:
-        lines.append(f"🗂 التصنيف: {escape_html(app.category)}")
+        platform_icon = "💻" if is_pc_game else "📱"
+        lines.append(f"{platform_icon} النظام: {escape_html(app.platform)}")
+    if category:
+        lines.append(f"🗂 التصنيف: {escape_html(category)}")
     if app.developer:
         lines.append(f"👨‍💻 المطور: {escape_html(app.developer)}")
     if app.downloads:
         lines.append(f"📥 التحميلات: {app.downloads}")
     if not short and app.description:
-        lines += ["", f"📝 الوصف:", "", escape_html(app.description)]
+        lines += ["", "📝 الوصف:", "", escape_html(app.description)]
     return "\n".join(lines)
 
 
