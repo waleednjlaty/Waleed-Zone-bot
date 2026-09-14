@@ -48,15 +48,18 @@ async def show_app(
         is_admin_user=is_admin(user_id),
     )
     text = app_card(app)
+    photo = app.icon_file_id or app.image_url
 
     if isinstance(target, CallbackQuery):
         return await _edit_message(
-            target.message, text=text, keyboard=kb, photo_id=app.icon_file_id
+            target.message,
+            text=text,
+            keyboard=kb,
+            photo_id=photo,
         )
-    if app.icon_file_id:
-        await target.answer_photo(
-            app.icon_file_id, caption=text, reply_markup=kb
-        )
+
+    if photo:
+        await target.answer_photo(photo, caption=text, reply_markup=kb)
     else:
         await target.answer(text, reply_markup=kb)
     return True
@@ -83,7 +86,10 @@ async def _edit_message(
         return True
     except Exception:
         try:
-            await message.answer(text, reply_markup=keyboard)
+            if photo_id:
+                await message.answer_photo(photo_id, caption=text, reply_markup=keyboard)
+            else:
+                await message.answer(text, reply_markup=keyboard)
             return True
         except Exception:
             return False
