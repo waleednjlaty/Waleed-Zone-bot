@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.handlers.common import show_app
@@ -21,7 +21,7 @@ from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB, MainMenuCB
 from app.utils.helpers import paginate
 from app.utils.text import app_card, escape_html
 from database import repositories as repo
-from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link
+from integrations.steamrip_extractor import extract_bzzhr_direct_link, fetch_game_data
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,10 @@ async def on_download(
                 )
                 return
 
-            url = await extract_bzzhr_direct_link(bzzhr_url)
+            url = await extract_bzzhr_direct_link(
+                bzzhr_url,
+                source_page_url=app.devupload_url,
+            )
 
             if not url:
                 await status_msg.edit_text(
