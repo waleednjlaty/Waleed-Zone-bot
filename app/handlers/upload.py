@@ -691,8 +691,16 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
         ]
     )
     try:
-        if app.icon_file_id:
-            await call.bot.send_photo(settings.CHANNEL_ID, app.icon_file_id, caption=text, reply_markup=kb)
+        # ألعاب SteamRIP تحفظ الغلاف الدائم في image_url، بينما التطبيقات القديمة
+        # قد تملك Telegram file_id فقط. نستخدم الغلاف الدائم أولاً ثم file_id.
+        photo = app.image_url or app.icon_file_id
+        if photo:
+            await call.bot.send_photo(
+                settings.CHANNEL_ID,
+                photo=photo,
+                caption=text,
+                reply_markup=kb,
+            )
         else:
             await call.bot.send_message(settings.CHANNEL_ID, text, reply_markup=kb)
         app.published = True
