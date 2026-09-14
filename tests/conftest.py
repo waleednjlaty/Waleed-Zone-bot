@@ -31,7 +31,12 @@ def mock_httpx(monkeypatch):
         import httpx
 
         transport = httpx.MockTransport(handler)
-        monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: httpx.AsyncClient(transport=transport, **kw))
+        original_async_client = httpx.AsyncClient
+        monkeypatch.setattr(
+            httpx,
+            "AsyncClient",
+            lambda **kw: original_async_client(transport=transport, **kw),
+        )
         return transport
 
     return _install
