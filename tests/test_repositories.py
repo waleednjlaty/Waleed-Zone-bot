@@ -22,6 +22,7 @@ async def test_user_get_or_create(db):
 @pytest.mark.asyncio
 async def test_application_crud_and_search(db):
     async with db.session() as session:
+        image_url = "https://example.com/icon.png"
         app = await repo.create_application(
             session,
             name="MyApp",
@@ -31,12 +32,14 @@ async def test_application_crud_and_search(db):
             category="Tools",
             platform="Android",
             developer="DevCo",
+            image_url=image_url,
             search_text="myapp tools android",
         )
         assert app.id is not None
 
         got = await repo.get_application(session, app.id)
         assert got.name == "MyApp"
+        assert got.image_url == image_url
 
         apps = await repo.list_applications(session, active_only=True, limit=10)
         assert any(a.id == app.id for a in apps)
