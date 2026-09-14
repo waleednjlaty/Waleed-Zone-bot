@@ -31,11 +31,10 @@ A production-oriented Telegram bot for publishing and managing apps and games in
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/waleednjlaty/waleed-zone-bot.git
-cd waleed-zone-bot
+git clone https://github.com/waleednjlaty/MyTelegramBot.git
+cd MyTelegramBot
 ```
 
-If the repository has not been renamed yet, use `MyTelegramBot` in the URL and directory name.
 
 ### 2. Create a virtual environment
 
