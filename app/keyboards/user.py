@@ -14,10 +14,24 @@ from app.utils.constants import (
     ReqCB,
     SearchCB,
 )
-from app.utils.helpers import paginate
 from config import get_settings
 
 PER_PAGE = 8
+
+
+def _telegram_link(value: str | None) -> str | None:
+    """حوّل اسم مستخدم تيليجرام أو رابطه إلى رابط صالح لزر Inline."""
+    if not value:
+        return None
+
+    username = value.strip()
+    if not username:
+        return None
+
+    if username.startswith(("https://t.me/", "http://t.me/")):
+        return username
+
+    return f"https://t.me/{username.lstrip('@')}"
 
 
 def main_menu_keyboard(*, is_admin_user: bool = False) -> InlineKeyboardMarkup:
@@ -225,10 +239,9 @@ def back_to_menu_keyboard() -> InlineKeyboardMarkup:
 def force_subscribe_keyboard() -> InlineKeyboardMarkup:
     settings = get_settings()
     kb: list[list[InlineKeyboardButton]] = []
-    if settings.CHANNEL_USERNAME:
-        kb.append(
-            [InlineKeyboardButton(text="📢 الاشتراك بالقناة", url=f"https://t.me/{settings.CHANNEL_USERNAME}")]
-        )
+    channel_url = _telegram_link(settings.CHANNEL_USERNAME)
+    if channel_url:
+        kb.append([InlineKeyboardButton(text="📢 الاشتراك بالقناة", url=channel_url)])
     kb.append(
         [InlineKeyboardButton(text="✅ تحقق", callback_data=MainMenuCB(action="check_sub").pack())]
     )
@@ -238,9 +251,11 @@ def force_subscribe_keyboard() -> InlineKeyboardMarkup:
 def channel_group_links_keyboard() -> InlineKeyboardMarkup:
     settings = get_settings()
     kb: list[list[InlineKeyboardButton]] = []
-    if settings.CHANNEL_USERNAME:
-        kb.append([InlineKeyboardButton(text="📢 القناة", url=f"https://t.me/{settings.CHANNEL_USERNAME}")])
-    if settings.GROUP_USERNAME:
-        kb.append([InlineKeyboardButton(text="💬 المجموعة", url=f"https://t.me/{settings.GROUP_USERNAME}")])
+    channel_url = _telegram_link(settings.CHANNEL_USERNAME)
+    group_url = _telegram_link(settings.GROUP_USERNAME)
+    if channel_url:
+        kb.append([InlineKeyboardButton(text="📢 القناة", url=channel_url)])
+    if group_url:
+        kb.append([InlineKeyboardButton(text="💬 المجموعة", url=group_url)])
     kb.append([InlineKeyboardButton(text="🏠 القائمة", callback_data=MainMenuCB(action="main").pack())])
     return InlineKeyboardMarkup(inline_keyboard=kb)
