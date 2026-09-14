@@ -28,7 +28,6 @@ from aiogram.types import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# ضع هذا بدلاً منه:
 from integrations.imgbb import ImgBBUploader
 from app.keyboards.user import cancel_keyboard
 from app.services.upload_service import build_upload_service
@@ -46,7 +45,7 @@ from app.utils.helpers import (
     is_admin,
     sanitize_filename,
 )
-from app.utils.text import escape_html
+from app.utils.text import append_app_footer, escape_html
 from config import get_settings
 from database import repositories as repo
 from integrations import (
@@ -84,7 +83,7 @@ async def _extract_direct_link_from_page(page_url: str) -> str | None:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"}
             response = await client.get(page_url, headers=headers)
             html = response.text
-            
+
             links = re.findall(r'href=["\'](https?://[^"\']+)["\']', html)
             for link in links:
                 if _is_direct_link(link):
@@ -127,16 +126,13 @@ async def _choice_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-# ---------------------------------------------------------------- بدء الرفع
 @router.callback_query(AppCB.filter(F.action == "upload"))
-async def on_upload_start(
-    call: CallbackQuery, state: FSMContext
-) -> None:
+async def on_upload_start(call: CallbackQuery, state: FSMContext) -> None:
     if not _only_admin(call):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
     await call.answer()
-    
+
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="📁 رفع ملف من تيليجرام", callback_data="upl:method_file")],
@@ -146,8 +142,7 @@ async def on_upload_start(
         ]
     )
     await call.message.edit_text(
-        "🚀 رفع تطبيق جديد\n\n"
-        "اختر طريقة الإضافة المناسبة:",
+        "🚀 رفع تطبيق جديد\n\nاختر طريقة الإضافة المناسبة:",
         reply_markup=kb,
     )
 
@@ -157,10 +152,7 @@ async def on_method_file(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     await state.set_state(UploadStates.waiting_file)
     await state.update_data(manual=False)
-    await call.message.edit_text(
-        "📤 أرسل ملف التطبيق الآن (APK / ZIP / EXE...).",
-        reply_markup=cancel_keyboard(),
-    )
+    await call.message.edit_text("📤 أرسل ملف التطبيق الآن (APK / ZIP / EXE...).", reply_markup=cancel_keyboard())
 
 
 @router.callback_query(F.data == "upl:method_remote")
@@ -180,29 +172,22 @@ async def on_method_Game(call: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(UploadStates.waiting_shrink_only_url)
     await state.update_data(manual=True)
     await call.message.edit_text(
-        "🔗 ارسل رابط اللعبة التي تريد رفعها \n\n"
-        "بعد الاختصار، سيكمل البوت معك خطوات النشر كالعادة.",
+        "🔗 ارسل رابط اللعبة التي تريد رفعها \n\nبعد الاختصار، سيكمل البوت معك خطوات النشر كالعادة.",
         reply_markup=cancel_keyboard(),
     )
 
 
 @router.callback_query(AdminCB.filter(F.action == "add_app"))
-async def on_add_app(
-    call: CallbackQuery, state: FSMContext
-) -> None:
+async def on_add_app(call: CallbackQuery, state: FSMContext) -> None:
     if not _only_admin(call):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
     await call.answer()
     await state.set_state(UploadStates.waiting_name)
     await state.update_data(manual=True)
-    await call.message.edit_text(
-        "➕ إضافة تطبيق يدويًا\n\n📱 أرسل اسم التطبيق:",
-        reply_markup=cancel_keyboard(),
-    )
+    await call.message.edit_text("➕ إضافة تطبيق يدويًا\n\n📱 أرسل اسم التطبيق:", reply_markup=cancel_keyboard())
 
 
-# ---------------------------------------------------------------- معالجة Shrink-Only
 @router.message(UploadStates.waiting_shrink_only_url)
 async def on_shrink_only_url(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
@@ -236,11 +221,8 @@ async def on_shrink_only_url(message: Message, state: FSMContext) -> None:
     await message.answer("📱 أرسل اسم التطبيق:", reply_markup=cancel_keyboard())
 
 
-# ---------------------------------------------------------------- الملف العادي
 @router.message(UploadStates.waiting_file)
-async def on_upload_file(
-    message: Message, session: AsyncSession, state: FSMContext
-) -> None:
+async def on_upload_file(message: Message, session: AsyncSession, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
         await message.answer("⛔ صلاحية غير متاحة.")
         return
@@ -254,18 +236,13 @@ async def on_upload_file(
     if document.file_size and document.file_size > settings.MAX_UPLOAD_BYTES:
         size = format_size(document.file_size)
         await message.answer(
-            f"❌ حجم الملف ({size}) أكبر من الحد المسموح "
-            f"({format_size(settings.MAX_UPLOAD_BYTES)})."
+            f"❌ حجم الملف ({size}) أكبر من الحد المسموح ({format_size(settings.MAX_UPLOAD_BYTES)})."
         )
         return
 
     status_msg = await message.answer("⏳ جاري رفع التطبيق...")
-
     safe_name = sanitize_filename(document.file_name or "file")
-    file_path = (
-        settings.DOWNLOAD_DIR
-        / f"{message.from_user.id}_{int(time.time())}_{safe_name}"
-    )
+    file_path = settings.DOWNLOAD_DIR / f"{message.from_user.id}_{int(time.time())}_{safe_name}"
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         await download_telegram_file(message.bot, document.file_id, file_path)
@@ -282,15 +259,12 @@ async def on_upload_file(
 
     service = await build_upload_service()
     try:
-        result = await service.run(
-            file_path, filename=document.file_name, progress_callback=progress
-        )
+        result = await service.run(file_path, filename=document.file_name, progress_callback=progress)
     except DevUploadAuthError as exc:
         logger.error("Upload failed due to DevUpload auth error: %s", exc)
         await status_msg.edit_text(
             "❌ **فشل المصادقة مع DevUpload**\n\n"
-            "يبدو أن مفتاح `DEVUPLOAD_API_KEY` غير صالح أو منتهي الصلاحية. "
-            "يرجى مراجعة الإعدادات والمحاولة مرة أخرى."
+            "يبدو أن مفتاح `DEVUPLOAD_API_KEY` غير صالح أو منتهي الصلاحية. يرجى مراجعة الإعدادات والمحاولة مرة أخرى."
         )
         return
     except DevUploadError as exc:
@@ -314,15 +288,13 @@ async def on_upload_file(
 
     if result.partially_successful:
         await status_msg.edit_text(
-            "⚠️ تم رفع التطبيق إلى Dev Upload لكن فشل إنشاء رابط ShrinkMe.\n"
-            "سيتم حفظ رابط Dev Upload مؤقتًا."
+            "⚠️ تم رفع التطبيق إلى Dev Upload لكن فشل إنشاء رابط ShrinkMe.\nسيتم حفظ رابط Dev Upload مؤقتًا."
         )
 
     await state.set_state(UploadStates.waiting_name)
     await message.answer("📱 أرسل اسم التطبيق:", reply_markup=cancel_keyboard())
 
 
-# ---------------------------------------------------------------- التحميل الريموتلي
 @router.message(UploadStates.waiting_remote_url)
 async def on_remote_url_received(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id):
@@ -343,9 +315,8 @@ async def on_remote_url_received(message: Message, state: FSMContext) -> None:
             ]
         )
         await message.answer(
-            "⚠️ **هذا الرابط مش ريموتلي!**\n"
-            "يبدو أن الرابط المرسل يعود لصفحة ويب وليس لرابط تحميل مباشر للملف.",
-            reply_markup=kb
+            "⚠️ **هذا الرابط مش ريموتلي!**\nيبدو أن الرابط المرسل يعود لصفحة ويب وليس لرابط تحميل مباشر للملف.",
+            reply_markup=kb,
         )
         return
 
@@ -357,7 +328,6 @@ async def on_find_download_link(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     encoded_url = call.data.split(":", 2)[2]
     page_url = urllib.parse.unquote(encoded_url)
-
     status_msg = await call.message.edit_text("🔍 جاري فحص الصفحة ومحاولة العثور على رابط التحميل المباشر...")
 
     direct_link = await _extract_direct_link_from_page(page_url)
@@ -368,7 +338,7 @@ async def on_find_download_link(call: CallbackQuery, state: FSMContext) -> None:
         await status_msg.edit_text(
             "❌ **لم يتم العثور على رابط تحميل مباشر تلقائياً في هذه الصفحة.**\n\n"
             "الرجاء إرسال رابط مباشر صحيح ينتهي بامتداد الملف (مثل .apk أو .zip).",
-            reply_markup=kb
+            reply_markup=kb,
         )
         return
 
@@ -379,15 +349,10 @@ async def on_find_download_link(call: CallbackQuery, state: FSMContext) -> None:
 
 async def _process_remote_download(message: Message, state: FSMContext, url: str) -> None:
     status_msg = await message.answer("⏳ جاري تحميل الملف من الرابط المباشر...")
-
     settings = get_settings()
     file_name = url.split("/")[-1].split("?")[0] or "remote_file.apk"
     safe_name = sanitize_filename(file_name)
-    
-    file_path = (
-        settings.DOWNLOAD_DIR
-        / f"{message.from_user.id}_{int(time.time())}_{safe_name}"
-    )
+    file_path = settings.DOWNLOAD_DIR / f"{message.from_user.id}_{int(time.time())}_{safe_name}"
 
     try:
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -412,9 +377,7 @@ async def _process_remote_download(message: Message, state: FSMContext, url: str
 
     service = await build_upload_service()
     try:
-        result = await service.run(
-            file_path, filename=file_name, progress_callback=progress
-        )
+        result = await service.run(file_path, filename=file_name, progress_callback=progress)
     except Exception as exc:
         logger.error("Upload pipeline failed for remote file: %s", exc)
         await status_msg.edit_text(f"❌ فشل رفع الملف المرفوع إلى المنصات.\n\nخطأ: {escape_html(str(exc))}")
@@ -431,16 +394,12 @@ async def _process_remote_download(message: Message, state: FSMContext, url: str
     )
 
     if result.partially_successful:
-        await status_msg.edit_text(
-            "⚠️ تم رفع الملف لكن فشل إنشاء رابط الاختصار.\n"
-            "سيتم حفظ رابط Dev Upload مؤقتًا."
-        )
+        await status_msg.edit_text("⚠️ تم رفع الملف لكن فشل إنشاء رابط الاختصار.\nسيتم حفظ رابط Dev Upload مؤقتًا.")
 
     await state.set_state(UploadStates.waiting_name)
     await message.answer("📱 أرسل اسم التطبيق:", reply_markup=cancel_keyboard())
 
 
-# ---------------------------------------------------------------- البيانات
 async def _ask_icon(message: Message, state: FSMContext) -> None:
     await state.set_state(UploadStates.waiting_icon)
     kb = InlineKeyboardMarkup(
@@ -449,10 +408,7 @@ async def _ask_icon(message: Message, state: FSMContext) -> None:
             [InlineKeyboardButton(text="❌ إلغاء", callback_data=MainMenuCB(action="main").pack())],
         ]
     )
-    await message.answer(
-        "🖼 أرسل صورة التطبيق (اختياري)\nأو اضغط «تخطي»:",
-        reply_markup=kb,
-    )
+    await message.answer("🖼 أرسل صورة التطبيق (اختياري)\nأو اضغط «تخطي»:", reply_markup=kb)
 
 
 async def _ask_publish(message: Message, state: FSMContext) -> None:
@@ -504,10 +460,7 @@ async def on_category(message: Message, state: FSMContext) -> None:
     await state.update_data(category=message.text.strip())
     data = await state.get_data()
     if data.get("manual") and not data.get("link"):
-        await message.answer(
-            "🔗 أرسل رابط التحميل النهائي للتطبيق:",
-            reply_markup=cancel_keyboard(),
-        )
+        await message.answer("🔗 أرسل رابط التحميل النهائي للتطبيق:", reply_markup=cancel_keyboard())
         await state.set_state(UploadStates.waiting_link)
     else:
         await _ask_icon(message, state)
@@ -527,7 +480,6 @@ async def on_link(message: Message, state: FSMContext) -> None:
 async def on_icon(message: Message, state: FSMContext) -> None:
     if message.photo:
         photo_file_id = message.photo[-1].file_id
-        # رفع الصورة تلقائياً لـ ImgBB وأخذ الرابط المباشر
         web_image_url = await imgbb_client.upload_telegram_photo(message.bot, photo_file_id)
         await state.update_data(icon_file_id=photo_file_id, image_url=web_image_url)
     else:
@@ -540,9 +492,7 @@ async def on_publish_text(message: Message, state: FSMContext) -> None:
     await message.answer("استخدم الأزرار للاختيار.")
 
 
-async def _choice_value(
-    call: CallbackQuery, state: FSMContext, field: str, value: str
-) -> None:
+async def _choice_value(call: CallbackQuery, state: FSMContext, field: str, value: str) -> None:
     await state.update_data(**{field: value})
     data = await state.get_data()
     if field == "platform":
@@ -552,9 +502,7 @@ async def _choice_value(
     elif field == "category":
         if data.get("manual") and not data.get("link"):
             await state.set_state(UploadStates.waiting_link)
-            await call.message.edit_text(
-                "🔗 أرسل رابط التحميل النهائي للتطبيق:", reply_markup=cancel_keyboard()
-            )
+            await call.message.edit_text("🔗 أرسل رابط التحميل النهائي للتطبيق:", reply_markup=cancel_keyboard())
         else:
             await _ask_icon(call.message, state)
 
@@ -600,7 +548,6 @@ async def on_publish_choice(call: CallbackQuery, state: FSMContext) -> None:
     await _show_preview(call.message, state)
 
 
-# ---------------------------------------------------------------- المعاينة
 async def _show_preview(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     link = data.get("shrankme_url") or data.get("link") or data.get("devupload_url") or "—"
@@ -631,7 +578,7 @@ async def _show_preview(message: Message, state: FSMContext) -> None:
             return
     except Exception:
         pass
-    
+
     try:
         await message.edit_text("\n".join(lines), reply_markup=kb)
     except Exception:
@@ -641,11 +588,8 @@ async def _show_preview(message: Message, state: FSMContext) -> None:
             await message.answer("\n".join(lines), reply_markup=kb)
 
 
-# ---------------------------------------------------------------- النشر
 @router.callback_query(AppCB.filter(F.action == "confirm"))
-async def on_confirm_app(
-    call: CallbackQuery, state: FSMContext, session: AsyncSession
-) -> None:
+async def on_confirm_app(call: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
     if not _only_admin(call):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
@@ -672,14 +616,11 @@ async def on_confirm_app(
         image_url=data.get("image_url"),
         devupload_url=devupload_url,
         shrankme_url=shrankme_url,
-        search_text=build_search_text(
-            name, data.get("category"), data.get("platform"), data.get("description")
-        ),
+        search_text=build_search_text(name, data.get("category"), data.get("platform"), data.get("description")),
     )
 
     await session.commit()
     await call.answer("✅ تم الحفظ والنشر")
-
     final_url = app.shrankme_url or app.devupload_url or ""
 
     success_text = (
@@ -702,7 +643,7 @@ async def on_confirm_app(
             [InlineKeyboardButton(text="📱 إدارة التطبيقات", callback_data=AdminCB(action="apps", page=0).pack())],
         ]
     )
-    
+
     await call.message.answer(success_text, reply_markup=kb)
 
     if data.get("publish_choice") == "yes":
@@ -742,6 +683,8 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
         f"📝 {escape_html(app.description or '')}\n\n"
         "⬇️ اضغط الزر لتحميل التطبيق"
     )
+    text = append_app_footer(text)
+
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🚀 تحميل الآن", url=deep_link or (app.shrankme_url or ""))]
@@ -762,9 +705,7 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
 
 async def _notify_new_app(call: CallbackQuery, app, session: AsyncSession) -> None:
     try:
-        global_enabled = await repo.get_setting_bool(
-            session, "notifications_enabled", True
-        )
+        global_enabled = await repo.get_setting_bool(session, "notifications_enabled", True)
         if not global_enabled:
             return
         users = await repo.list_notification_users(session)
@@ -778,13 +719,17 @@ async def _notify_new_app(call: CallbackQuery, app, session: AsyncSession) -> No
         f"📦 {escape_html(app.version or '')}\n"
         f"{escape_html(app.category or '')}"
     )
+    text = append_app_footer(text)
+
     bot_username = await _bot_username(call)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text="📥 فتح التطبيق",
-                url=f"https://t.me/{bot_username}?start=app_{app.id}",
-            )]
+            [
+                InlineKeyboardButton(
+                    text="📥 فتح التطبيق",
+                    url=f"https://t.me/{bot_username}?start=app_{app.id}",
+                )
+            ]
         ]
     )
     sent = 0
