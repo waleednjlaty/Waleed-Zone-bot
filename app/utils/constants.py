@@ -7,7 +7,8 @@ BOT_USERNAME_ENV = "BOT_USERNAME"  # من .env إن وُجد
 
 DEFAULT_CATEGORIES = [
     "أدوات",
-    "ألعاب",
+    "ألعاب كمبيوتر",
+    "ألعاب موبايل",
     "مونتاج",
     "VPN",
     "متصفح",
