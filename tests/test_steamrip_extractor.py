@@ -2,6 +2,7 @@ from integrations.steamrip_extractor import (
     _bzzhr_candidates,
     _direct_link_from_headers,
     _extract_signed_download_endpoint,
+    _looks_like_cloudflare_challenge,
     _normalize_url,
 )
 
@@ -62,3 +63,12 @@ def test_page_url_is_not_mistaken_for_direct_download():
     )
 
     assert direct is None
+
+
+def test_cloudflare_solver_is_only_requested_for_real_challenge():
+    challenge_html = "<title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/x'></script>"
+    normal_html = '<a hx-get="/file-xyz/download?t=abc">Download</a>'
+
+    assert _looks_like_cloudflare_challenge(403, challenge_html) is True
+    assert _looks_like_cloudflare_challenge(200, normal_html) is False
+    assert _looks_like_cloudflare_challenge(403, "Forbidden") is False
