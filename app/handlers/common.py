@@ -1,4 +1,4 @@
-"""أدوات مشتركة بين المعالجات: عرض صفحة تطبيق و إرسال/تعديل رسائل بأمان."""
+"""أدوات مشتركة بين المعالجات: عرض صفحة تطبيق وإرسال/تعديل رسائل بأمان."""
 
 from __future__ import annotations
 
@@ -59,9 +59,14 @@ async def show_app(
         )
 
     if photo:
-        await target.answer_photo(photo, caption=text, reply_markup=kb)
-    else:
-        await target.answer(text, reply_markup=kb)
+        try:
+            await target.answer_photo(photo, caption=text, reply_markup=kb)
+            return True
+        except Exception:
+            # رابط الصورة قد يصبح غير صالح؛ لا نمنع عرض التطبيق بسببه.
+            pass
+
+    await target.answer(text, reply_markup=kb)
     return True
 
 
@@ -81,15 +86,22 @@ async def _edit_message(
             return True
         except Exception:
             pass
+
     try:
         await message.edit_text(text, reply_markup=keyboard)
         return True
     except Exception:
+        pass
+
+    if photo_id:
         try:
-            if photo_id:
-                await message.answer_photo(photo_id, caption=text, reply_markup=keyboard)
-            else:
-                await message.answer(text, reply_markup=keyboard)
+            await message.answer_photo(photo_id, caption=text, reply_markup=keyboard)
             return True
         except Exception:
-            return False
+            pass
+
+    try:
+        await message.answer(text, reply_markup=keyboard)
+        return True
+    except Exception:
+        return False
