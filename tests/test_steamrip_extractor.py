@@ -1,6 +1,9 @@
+from bs4 import BeautifulSoup
+
 from integrations.steamrip_extractor import (
     _bzzhr_candidates,
     _direct_link_from_headers,
+    _extract_game_image,
     _extract_signed_download_endpoint,
     _looks_like_cloudflare_challenge,
     _normalize_url,
@@ -72,3 +75,55 @@ def test_cloudflare_solver_is_only_requested_for_real_challenge():
     assert _looks_like_cloudflare_challenge(403, challenge_html) is True
     assert _looks_like_cloudflare_challenge(200, normal_html) is False
     assert _looks_like_cloudflare_challenge(403, "Forbidden") is False
+
+
+def test_game_image_uses_lazy_url_instead_of_data_placeholder():
+    html = """
+    <article>
+      <div class="entry-content">
+        <img
+          src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+          data-lazy-src="https://steamrip.com/wp-content/uploads/game-cover.webp"
+        >
+      </div>
+    </article>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    assert _extract_game_image(soup, "https://steamrip.com/example/") == (
+        "https://steamrip.com/wp-content/uploads/game-cover.webp"
+    )
+
+
+def test_game_image_uses_largest_srcset_candidate():
+    html = """
+    <div class="entry-content">
+      <img
+        src="data:image/png;base64,placeholder"
+        data-srcset="/small.jpg 300w, /medium.jpg 768w, /large.jpg 1280w"
+      >
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    assert _extract_game_image(soup, "https://steamrip.com/example/") == (
+        "https://steamrip.com/large.jpg"
+    )
+
+
+def test_game_image_falls_back_to_open_graph_image():
+    html = """
+    <html>
+      <head>
+        <meta property="og:image" content="https://cdn.example.com/game.jpg">
+      </head>
+      <body>
+        <img src="data:image/png;base64,placeholder">
+      </body>
+    </html>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    assert _extract_game_image(soup, "https://steamrip.com/example/") == (
+        "https://cdn.example.com/game.jpg"
+    )
