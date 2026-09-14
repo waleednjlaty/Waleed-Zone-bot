@@ -85,6 +85,38 @@ def _bzzhr_candidates(url: str) -> list[str]:
     ]
 
 
+def _is_bzzhr_url(url: str) -> bool:
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except Exception:
+        return False
+    return host in BZZHR_MIRRORS
+
+
+def _plain_download_endpoint(page_url: str) -> str:
+    """كوّن /download من رابط صفحة BZZHR نفسها بدون التأثر بأي redirect خارجي."""
+    parsed = urlsplit(page_url)
+    path = parsed.path.rstrip("/") + "/download"
+    return urlunsplit((parsed.scheme or "https", parsed.netloc, path, "", ""))
+
+
+def _redirect_from_response(response, base_url: str, page_url: str) -> str | None:
+    """اقرأ رابط التحميل النهائي من HX-Redirect أو Location."""
+    direct_link = response.headers.get("HX-Redirect") or response.headers.get("hx-redirect")
+    if direct_link:
+        direct_link = _normalize_url(direct_link, base_url)
+        if direct_link.rstrip("/") != page_url.rstrip("/"):
+            return direct_link
+
+    location = response.headers.get("Location") or response.headers.get("location")
+    if location:
+        location = _normalize_url(location, base_url)
+        if location.rstrip("/") != page_url.rstrip("/"):
+            return location
+
+    return None
+
+
 async def fetch_game_data(page_url: str) -> dict:
     """كشط بيانات صفحة اللعبة من SteamRIP واستخراج روابط السيرفرات المتوفرة."""
 
@@ -167,6 +199,35 @@ async def fetch_game_data(page_url: str) -> dict:
     }
 
 
+async def _request_bzzhr_download(
+    session: AsyncSession,
+    page_url: str,
+    download_endpoint: str,
+) -> str | None:
+    """أرسل طلب HTMX إلى endpoint التحميل وأعد الرابط النهائي إن وُجد."""
+    hx_headers = {
+        "Accept": "*/*",
+        "HX-Request": "true",
+        "HX-Current-URL": page_url,
+        "Referer": page_url,
+    }
+
+    response = await session.get(
+        download_endpoint,
+        headers=hx_headers,
+        timeout=20,
+        allow_redirects=False,
+    )
+
+    logger.info(
+        "BZZHR download endpoint HTTP %s for %s",
+        response.status_code,
+        download_endpoint,
+    )
+
+    return _redirect_from_response(response, download_endpoint, page_url)
+
+
 async def _extract_from_bzzhr_candidate(candidate_url: str) -> str | None:
     """جرّب استخراج الرابط المباشر من مرآة BZZHR واحدة."""
 
@@ -174,90 +235,78 @@ async def _extract_from_bzzhr_candidate(candidate_url: str) -> str | None:
         impersonate="chrome",
         headers=HEADERS,
     ) as session:
-        response = await session.get(
+        # أولاً نجرب endpoint القياسي مباشرة من رابط BZZHR الأصلي.
+        # هذا يمنع الخطأ السابق الذي كان يبني /download من redirect إلى SteamRIP.
+        plain_endpoint = _plain_download_endpoint(candidate_url)
+        direct_link = await _request_bzzhr_download(
+            session,
+            candidate_url,
+            plain_endpoint,
+        )
+        if direct_link:
+            return direct_link
+
+        # إذا كان endpoint القياسي غير كافٍ، نحاول قراءة hx-get من صفحة BZZHR.
+        # لا نتبع redirects الخارجية حتى لا يتحول base URL إلى steamrip.com.
+        page_response = await session.get(
             candidate_url,
             timeout=20,
-            allow_redirects=True,
+            allow_redirects=False,
         )
 
-        if response.status_code != 200:
-            logger.warning(
-                "BZZHR page returned HTTP %s for %s",
-                response.status_code,
-                candidate_url,
-            )
+        logger.info(
+            "BZZHR page HTTP %s for %s",
+            page_response.status_code,
+            candidate_url,
+        )
+
+        if page_response.status_code != 200:
+            location = page_response.headers.get("Location") or page_response.headers.get("location")
+            if location:
+                redirected = _normalize_url(location, candidate_url)
+                logger.warning(
+                    "BZZHR page redirected to %s",
+                    redirected,
+                )
             return None
 
-        final_page_url = str(response.url)
-        soup = BeautifulSoup(response.text, "html.parser")
-
+        soup = BeautifulSoup(page_response.text, "html.parser")
         download_endpoint = None
 
         download_element = soup.select_one('[hx-get*="/download"]')
         if download_element:
             hx_get = download_element.get("hx-get")
             if hx_get:
-                download_endpoint = _normalize_url(hx_get, final_page_url)
+                candidate_endpoint = _normalize_url(hx_get, candidate_url)
+                if _is_bzzhr_url(candidate_endpoint):
+                    download_endpoint = candidate_endpoint
 
         if not download_endpoint:
             download_element = soup.select_one('a[href*="/download"]')
             if download_element:
                 href = download_element.get("href")
                 if href:
-                    download_endpoint = _normalize_url(href, final_page_url)
+                    candidate_endpoint = _normalize_url(href, candidate_url)
+                    if _is_bzzhr_url(candidate_endpoint):
+                        download_endpoint = candidate_endpoint
 
         if not download_endpoint:
-            download_endpoint = final_page_url.rstrip("/") + "/download"
-
-        hx_headers = {
-            "HX-Request": "true",
-            "HX-Current-URL": final_page_url,
-            "Referer": final_page_url,
-        }
-
-        download_response = await session.get(
-            download_endpoint,
-            headers=hx_headers,
-            timeout=20,
-            allow_redirects=False,
-        )
-
-        logger.info(
-            "BZZHR download endpoint HTTP %s for %s",
-            download_response.status_code,
-            download_endpoint,
-        )
-
-        if download_response.status_code == 403:
-            logger.warning(
-                "BZZHR download endpoint rejected request with HTTP 403: %s",
-                download_endpoint,
-            )
             return None
 
-        direct_link = download_response.headers.get("HX-Redirect")
-        if direct_link:
-            direct_link = _normalize_url(direct_link, download_endpoint)
-            if direct_link.rstrip("/") != final_page_url.rstrip("/"):
-                return direct_link
+        if download_endpoint == plain_endpoint:
+            return None
 
-        location = download_response.headers.get("Location")
-        if location:
-            location = _normalize_url(location, download_endpoint)
-            if location.rstrip("/") != final_page_url.rstrip("/"):
-                return location
-
-        return None
+        return await _request_bzzhr_download(
+            session,
+            candidate_url,
+            download_endpoint,
+        )
 
 
 async def extract_bzzhr_direct_link(
     bzzhr_url: str,
 ) -> str | None:
-    """استخراج رابط التحميل المباشر الحقيقي من BZZHR / Buzzheavier.
-
-    يجرب المرايا الرسمية، ويستخدم بصمة متصفح Chrome بدلاً من aiohttp
-    لأن بعض بيئات الاستضافة السحابية تتلقى HTTP 403 عند الطلب العادي.
-    """
+    """استخراج رابط التحميل المباشر الحقيقي من BZZHR / Buzzheavier."""
 
     candidates = _bzzhr_candidates(bzzhr_url)
     if not candidates:
