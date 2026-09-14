@@ -7,6 +7,23 @@ from database.models import Application
 from .catalog import PC_GAME_CATEGORY, display_category
 from .helpers import format_size, human_time
 
+APP_DOWNLOAD_FOOTER = (
+    "━━━━━━━━━━━━━━\n"
+    "🎮 لتحميل الألعاب والتطبيقات بسهولة:\n"
+    "🤖 البوت: @Waleed_zone_bot\n"
+    "🌐 الموقع: https://waleed-zone.up.railway.app/"
+)
+
+
+def append_app_footer(text: str) -> str:
+    """أضف تذييل التحميل الموحد لرسائل التطبيقات والألعاب."""
+    clean = (text or "").rstrip()
+    if not clean:
+        return APP_DOWNLOAD_FOOTER
+    if APP_DOWNLOAD_FOOTER in clean:
+        return clean
+    return f"{clean}\n\n{APP_DOWNLOAD_FOOTER}"
+
 
 def escape_html(text: str | None) -> str:
     if not text:
@@ -42,7 +59,8 @@ def app_card(app: Application, *, short: bool = False) -> str:
         lines.append(f"📥 التحميلات: {app.downloads}")
     if not short and app.description:
         lines += ["", "📝 الوصف:", "", escape_html(app.description)]
-    return "\n".join(lines)
+
+    return append_app_footer("\n".join(lines))
 
 
 def latest_header() -> str:
