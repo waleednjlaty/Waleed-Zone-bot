@@ -153,8 +153,7 @@ async def on_quick_publish_rip(message: Message, session: AsyncSession) -> None:
             platform="Windows",
             image_url=game["image_url"],
             devupload_url=page_url,
-            published=True,
-            active=True,
+            # تم إزالة published=True و active=True من هنا لتطابق قاعدة بياناتك
             search_text=build_search_text(game["title"], "Games", "Windows", game["title"])
         )
         await session.commit()
