@@ -13,7 +13,9 @@ async def global_stats(session: AsyncSession) -> str:
     new_today = await repo.count_users_today(session)
     apps = await repo.count_applications(session)
     downloads = await repo.count_downloads(session)
+    downloads_today = await repo.count_downloads_today(session)
     searches = await repo.count_searches(session)
+    searches_today = await repo.count_searches_today(session)
     requests = await repo.count_requests(session)
     pending = await repo.count_pending_requests(session)
     warnings = await repo.count_warnings(session)
@@ -25,7 +27,9 @@ async def global_stats(session: AsyncSession) -> str:
         f"🆕 مستخدمون جدد اليوم: {new_today}\n"
         f"📱 عدد التطبيقات: {apps}\n"
         f"📥 إجمالي التحميلات: {downloads}\n"
-        f"🔎 عمليات البحث: {searches}\n"
+        f"📅 تحميلات اليوم: {downloads_today}\n"
+        f"🔎 إجمالي عمليات البحث: {searches}\n"
+        f"📅 عمليات بحث اليوم: {searches_today}\n"
         f"📥 طلبات التطبيقات: {requests}\n"
         f"⏳ طلبات معلقة: {pending}\n"
         f"⚠️ تحذيرات المجموعة: {warnings}"

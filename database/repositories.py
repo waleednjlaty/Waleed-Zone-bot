@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,11 @@ from database.models import (
     Setting,
     User,
 )
+
+
+def _utc_start_of_today() -> datetime:
+    """بداية اليوم الحالي بتوقيت UTC لاستخدامها في إحصائيات اليوم."""
+    return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 # --------------------------------------------------------------------------
@@ -75,7 +80,7 @@ async def count_users(session: AsyncSession) -> int:
 
 
 async def count_users_today(session: AsyncSession) -> int:
-    since = datetime.now(timezone.utc) - timedelta(days=1)
+    since = _utc_start_of_today()
     return (
         await session.scalar(
             select(func.count(User.id)).where(User.created_at >= since)
@@ -270,7 +275,7 @@ async def count_downloads(session: AsyncSession) -> int:
 
 
 async def count_downloads_today(session: AsyncSession) -> int:
-    since = datetime.now(timezone.utc) - timedelta(days=1)
+    since = _utc_start_of_today()
     return (
         await session.scalar(
             select(func.count(Download.id)).where(Download.created_at >= since)
@@ -413,7 +418,7 @@ async def count_searches(session: AsyncSession) -> int:
 
 
 async def count_searches_today(session: AsyncSession) -> int:
-    since = datetime.now(timezone.utc) - timedelta(days=1)
+    since = _utc_start_of_today()
     return (
         await session.scalar(
             select(func.count(SearchLog.id)).where(SearchLog.created_at >= since)
