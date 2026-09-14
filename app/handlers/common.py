@@ -48,7 +48,10 @@ async def show_app(
         is_admin_user=is_admin(user_id),
     )
     text = app_card(app)
-    photo = app.icon_file_id or app.image_url
+
+    # نفضّل رابط ImgBB المرتبط بالتطبيق لأنه ثابت ومتاح خارج جلسة Telegram،
+    # ثم نرجع إلى file_id كاحتياط للتطبيقات القديمة.
+    photo = app.image_url or app.icon_file_id
 
     if isinstance(target, CallbackQuery):
         return await _edit_message(
