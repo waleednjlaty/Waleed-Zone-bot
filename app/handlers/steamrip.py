@@ -20,6 +20,7 @@ from app.utils.constants import (
     REQUIRED_PLATFORMS,
 )
 from app.utils.helpers import build_search_text, escape_html, is_admin
+from app.utils.text import append_app_footer
 from config import get_settings
 from database import repositories as repo
 from integrations.imgbb import ImgBBUploader
@@ -287,7 +288,6 @@ async def _show_preview(message: Message, state: FSMContext) -> None:
         ]
     )
 
-    # للمعاينة فقط نستطيع استخدام الصورة الأصلية؛ عند الحفظ يتم نقلها إلى ImgBB.
     photo = data.get("icon_file_id")
     if not photo and image_mode == "site":
         photo = data.get("source_image_url")
@@ -329,6 +329,7 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
         f"📝 {escape_html(app.description or '')}\n\n"
         "⬇️ اضغط الزر لتحميل اللعبة"
     )
+    text = append_app_footer(text)
 
     kb = (
         InlineKeyboardMarkup(
@@ -340,7 +341,6 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
         else None
     )
 
-    # نفضل الرابط الدائم على ImgBB، ثم Telegram file_id كاحتياط.
     photo = app.image_url or app.icon_file_id
 
     try:
@@ -359,10 +359,6 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
         await call.message.answer("❌ تم حفظ اللعبة، لكن فشل النشر في القناة.")
 
 
-# ---------------------------------------------------------------------------
-# التحميل اللحظي القديم (يبقى متاحاً لأي زر rip_dl/rip_refresh موجود)
-# ---------------------------------------------------------------------------
-
 @router.callback_query(F.data.startswith("rip_dl:") | F.data.startswith("rip_refresh:"))
 async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> None:
     app_id = int(call.data.split(":")[1])
@@ -375,18 +371,11 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="📥 بدء التحميل المباشر", url=app.shrankme_url)],
-                [
-                    InlineKeyboardButton(
-                        text="🔙 رجوع",
-                        callback_data=f"app:view:{app_id}",
-                    )
-                ],
+                [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
             ]
         )
         await call.message.edit_text(
-            f"🎮 {escape_html(app.name)}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "✅ تم تجهيز الرابط المباشر للعبة.",
+            f"🎮 {escape_html(app.name)}\n━━━━━━━━━━━━━━━━━━━\n✅ تم تجهيز الرابط المباشر للعبة.",
             reply_markup=markup,
         )
         return
@@ -401,9 +390,7 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
         game_data = await fetch_game_data(app.devupload_url)
         servers = game_data.get("servers", {})
         if not servers:
-            await call.message.edit_text(
-                "⚠️ السيرفرات قيد التحديث في المصدر حالياً، يرجى إعادة المحاولة بعد قليل."
-            )
+            await call.message.edit_text("⚠️ السيرفرات قيد التحديث في المصدر حالياً، يرجى إعادة المحاولة بعد قليل.")
             return
 
         bzzhr_url = next(
@@ -429,12 +416,7 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
                 markup = InlineKeyboardMarkup(
                     inline_keyboard=[
                         [InlineKeyboardButton(text="📥 بدء التحميل المباشر", url=direct_link)],
-                        [
-                            InlineKeyboardButton(
-                                text="🔙 رجوع",
-                                callback_data=f"app:view:{app_id}",
-                            )
-                        ],
+                        [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
                     ]
                 )
                 await call.message.edit_text(
@@ -449,45 +431,28 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
             await call.message.edit_text(
                 "❌ تعذر استخراج الرابط المباشر من صفحة BZZHR.",
                 reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text="🔙 رجوع",
-                                callback_data=f"app:view:{app_id}",
-                            )
-                        ]
-                    ]
+                    inline_keyboard=[[InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")]]
                 ),
             )
             return
 
-        await call.message.edit_text(
-            f"⚠️ سيرفر BZZHR غير متوفر للعبة {escape_html(app.name)}."
-        )
+        await call.message.edit_text(f"⚠️ سيرفر BZZHR غير متوفر للعبة {escape_html(app.name)}.")
     except Exception as exc:
         logger.exception("Live scrape failed")
         await call.message.edit_text(f"❌ تعذر جلب الروابط:\n{escape_html(str(exc))}")
 
 
-# ---------------------------------------------------------------------------
-# رابط مخصص للإدارة
-# ---------------------------------------------------------------------------
-
 @router.callback_query(F.data.startswith("add_custom_link:"))
 async def on_add_custom_link(call: CallbackQuery, state: FSMContext) -> None:
     if not is_admin(call.from_user.id):
-        await call.answer(
-            "⛔ صلاحية غير متاحة. هذا الخيار للإدارة فقط.",
-            show_alert=True,
-        )
+        await call.answer("⛔ صلاحية غير متاحة. هذا الخيار للإدارة فقط.", show_alert=True)
         return
 
     app_id = int(call.data.split(":")[1])
     await state.update_data(target_app_id=app_id)
     await state.set_state(SteamRipStates.waiting_custom_link)
     await call.message.edit_text(
-        "🔗 إضافة رابط تحميل مخصص\n\n"
-        "أرسل الرابط المباشر الذي ترغب بإضافته لهذه اللعبة:",
+        "🔗 إضافة رابط تحميل مخصص\n\nأرسل الرابط المباشر الذي ترغب بإضافته لهذه اللعبة:",
         reply_markup=cancel_keyboard(),
     )
 
@@ -520,10 +485,6 @@ async def on_custom_link_received(
     await state.clear()
 
 
-# ---------------------------------------------------------------------------
-# بدء الإضافة من لوحة الإدارة و /rip URL
-# ---------------------------------------------------------------------------
-
 @router.callback_query(AdminCB.filter(F.action == "add_rip_game"))
 async def on_add_rip_game_btn(call: CallbackQuery, state: FSMContext) -> None:
     if not is_admin(call.from_user.id):
@@ -534,8 +495,7 @@ async def on_add_rip_game_btn(call: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(SteamRipStates.waiting_game_url)
     await call.message.edit_text(
-        "🎮 إضافة لعبة كمبيوتر من SteamRIP\n\n"
-        "أرسل رابط صفحة اللعبة من موقع SteamRIP الآن:",
+        "🎮 إضافة لعبة كمبيوتر من SteamRIP\n\nأرسل رابط صفحة اللعبة من موقع SteamRIP الآن:",
         reply_markup=cancel_keyboard(),
     )
 
@@ -547,10 +507,7 @@ async def on_steamrip_url_received(message: Message, state: FSMContext) -> None:
 
     page_url = (message.text or "").strip()
     if not page_url.startswith(("http://", "https://")):
-        await message.reply(
-            "❌ أرسل رابطاً صحيحاً يبدأ بـ http أو https",
-            reply_markup=cancel_keyboard(),
-        )
+        await message.reply("❌ أرسل رابطاً صحيحاً يبدأ بـ http أو https", reply_markup=cancel_keyboard())
         return
 
     status_msg = await message.reply("⏳ جاري فحص SteamRIP وسحب بيانات اللعبة...")
@@ -564,20 +521,13 @@ async def on_quick_publish_rip(message: Message, state: FSMContext) -> None:
 
     args = (message.text or "").split(maxsplit=1)
     if len(args) < 2 or not args[1].startswith(("http://", "https://")):
-        await message.reply(
-            "⚠️ طريقة الاستخدام:\n"
-            "/rip https://steamrip.com/game-name-free-download/"
-        )
+        await message.reply("⚠️ طريقة الاستخدام:\n/rip https://steamrip.com/game-name-free-download/")
         return
 
     page_url = args[1].strip()
     status_msg = await message.reply("⏳ جاري فحص SteamRIP وسحب بيانات اللعبة...")
     await _prepare_rip_flow(message, state, page_url, status_msg)
 
-
-# ---------------------------------------------------------------------------
-# اختيار إدخال البيانات
-# ---------------------------------------------------------------------------
 
 @router.callback_query(F.data == "rip:meta_manual")
 async def on_rip_manual_metadata(call: CallbackQuery, state: FSMContext) -> None:
@@ -593,8 +543,7 @@ async def on_rip_manual_metadata(call: CallbackQuery, state: FSMContext) -> None
     await call.answer()
     await state.set_state(SteamRipStates.waiting_name)
     await call.message.edit_text(
-        "✍️ إضافة اللعبة يدويًا خطوة بخطوة\n\n"
-        "1️⃣ أرسل اسم التطبيق:",
+        "✍️ إضافة اللعبة يدويًا خطوة بخطوة\n\n1️⃣ أرسل اسم التطبيق:",
         reply_markup=_cancel_keyboard(),
     )
 
@@ -640,10 +589,7 @@ async def on_rip_description(message: Message, state: FSMContext) -> None:
 
     await state.update_data(description=value)
     await state.set_state(SteamRipStates.waiting_version)
-    await message.answer(
-        "3️⃣ 📦 أرسل الإصدار (مثال: 1.0 أو Latest):",
-        reply_markup=_cancel_keyboard(),
-    )
+    await message.answer("3️⃣ 📦 أرسل الإصدار (مثال: 1.0 أو Latest):", reply_markup=_cancel_keyboard())
 
 
 @router.message(SteamRipStates.waiting_version)
@@ -657,11 +603,7 @@ async def on_rip_version(message: Message, state: FSMContext) -> None:
     await state.set_state(SteamRipStates.waiting_platform)
     await message.answer(
         "4️⃣ 💻 اختر النظام أو اكتبه:",
-        reply_markup=_choice_keyboard(
-            REQUIRED_PLATFORMS,
-            "rip:pf",
-            "rip:custom_platform",
-        ),
+        reply_markup=_choice_keyboard(REQUIRED_PLATFORMS, "rip:pf", "rip:custom_platform"),
     )
 
 
@@ -715,27 +657,14 @@ async def on_rip_custom_category(call: CallbackQuery, state: FSMContext) -> None
     await call.message.edit_text("✍️ اكتب اسم التصنيف:", reply_markup=_cancel_keyboard())
 
 
-# ---------------------------------------------------------------------------
-# الصورة
-# ---------------------------------------------------------------------------
-
 @router.callback_query(F.data == "rip:img_site")
 async def on_rip_image_site(call: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     if not data.get("source_image_url"):
-        await call.answer(
-            "⚠️ لم يتم العثور على صورة في SteamRIP.",
-            show_alert=True,
-        )
+        await call.answer("⚠️ لم يتم العثور على صورة في SteamRIP.", show_alert=True)
         return
 
-    # لا نعتبر رابط SteamRIP رابطاً دائماً ولا نخزنه كصورة التطبيق.
-    # نحتفظ به كمصدر فقط، ثم بعد إنشاء التطبيق والحصول على ID ننقله إلى ImgBB.
-    await state.update_data(
-        image_mode="site",
-        image_url=None,
-        icon_file_id=None,
-    )
+    await state.update_data(image_mode="site", image_url=None, icon_file_id=None)
     await call.answer("✅ سيتم ترحيل صورة SteamRIP إلى ImgBB عند الحفظ")
     await _ask_publish(call.message, state)
 
@@ -745,8 +674,7 @@ async def on_rip_image_manual(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
     await state.set_state(SteamRipStates.waiting_manual_image)
     await call.message.edit_text(
-        "🖼 أرسل صورة اللعبة الآن:\n\n"
-        "سيتم رفعها إلى ImgBB وربطها بـ ID اللعبة عند الحفظ.",
+        "🖼 أرسل صورة اللعبة الآن:\n\nسيتم رفعها إلى ImgBB وربطها بـ ID اللعبة عند الحفظ.",
         reply_markup=_cancel_keyboard(),
     )
 
@@ -754,11 +682,7 @@ async def on_rip_image_manual(call: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "rip:img_none")
 async def on_rip_image_none(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
-    await state.update_data(
-        image_mode="none",
-        image_url=None,
-        icon_file_id=None,
-    )
+    await state.update_data(image_mode="none", image_url=None, icon_file_id=None)
     await _ask_publish(call.message, state)
 
 
@@ -768,19 +692,10 @@ async def on_rip_manual_image(message: Message, state: FSMContext) -> None:
         await message.answer("❌ أرسل صورة، وليس نصًا أو ملفًا آخر.")
         return
 
-    # نخزن Telegram file_id الآن للمعاينة. الرفع إلى ImgBB يتم بعد الحصول على app.id.
     photo_file_id = message.photo[-1].file_id
-    await state.update_data(
-        image_mode="telegram",
-        icon_file_id=photo_file_id,
-        image_url=None,
-    )
+    await state.update_data(image_mode="telegram", icon_file_id=photo_file_id, image_url=None)
     await _ask_publish(message, state)
 
-
-# ---------------------------------------------------------------------------
-# النشر والمعاينة والحفظ
-# ---------------------------------------------------------------------------
 
 @router.callback_query(F.data.in_({"rip:pub_yes", "rip:pub_no"}))
 async def on_rip_publish_choice(call: CallbackQuery, state: FSMContext) -> None:
@@ -811,17 +726,12 @@ async def on_rip_confirm(
     image_mode = data.get("image_mode") or "none"
 
     if not name or not source_page_url:
-        await call.answer(
-            "⚠️ بيانات الإضافة ناقصة. أرسل /rip من جديد.",
-            show_alert=True,
-        )
+        await call.answer("⚠️ بيانات الإضافة ناقصة. أرسل /rip من جديد.", show_alert=True)
         return
 
     await call.answer("⏳ جاري حفظ اللعبة وترحيل الصورة...")
 
     try:
-        # flush داخل create_application يعطينا ID قبل commit، وهكذا نستطيع تسمية
-        # الصورة وربطها بنفس ID قبل أن يصبح السجل مرئياً للمستخدمين.
         app = await repo.create_application(
             session,
             name=name,
@@ -834,12 +744,7 @@ async def on_rip_confirm(
             image_url=None,
             devupload_url=source_page_url,
             shrankme_url=None,
-            search_text=build_search_text(
-                name,
-                data.get("category"),
-                data.get("platform"),
-                data.get("description"),
-            ),
+            search_text=build_search_text(name, data.get("category"), data.get("platform"), data.get("description")),
         )
 
         hosted_image_url = ""
@@ -849,35 +754,26 @@ async def on_rip_confirm(
             source_image_url = data.get("source_image_url")
             if not source_image_url:
                 raise RuntimeError("لم يعد رابط صورة SteamRIP متوفراً.")
-
             hosted_image_url = await imgbb_client.upload_remote_image(
                 source_image_url,
                 name=image_name,
                 referer=source_page_url,
             )
-
         elif image_mode == "telegram":
             icon_file_id = data.get("icon_file_id")
             if not icon_file_id:
                 raise RuntimeError("صورة Telegram غير موجودة في جلسة الإضافة.")
-
-            hosted_image_url = await imgbb_client.upload_telegram_photo(
-                call.bot,
-                icon_file_id,
-                name=image_name,
-            )
+            hosted_image_url = await imgbb_client.upload_telegram_photo(call.bot, icon_file_id, name=image_name)
 
         if image_mode in {"site", "telegram"}:
             if not hosted_image_url:
                 raise RuntimeError(
-                    "فشل ترحيل صورة اللعبة إلى ImgBB. "
-                    "تأكد من IMGBB_API_KEY وأن صورة المصدر متاحة ثم أعد المحاولة."
+                    "فشل ترحيل صورة اللعبة إلى ImgBB. تأكد من IMGBB_API_KEY وأن صورة المصدر متاحة ثم أعد المحاولة."
                 )
             app.image_url = hosted_image_url
             await repo.update_application(session, app)
 
         await session.commit()
-
     except Exception as exc:
         logger.exception("RIP app creation/image migration failed")
         await session.rollback()
