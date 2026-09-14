@@ -22,11 +22,11 @@ PER_PAGE = 8
 
 def main_menu_keyboard(*, is_admin_user: bool = False) -> InlineKeyboardMarkup:
     kb = [
+        [InlineKeyboardButton(text="🆕 أحدث التطبيقات", callback_data=LatestCB(page=0).pack())],
         [InlineKeyboardButton(text="📱 التطبيقات", callback_data=AppsCB(category="cats", page=0).pack()),
         
             InlineKeyboardButton(text="🔎 بحث عن تطبيق", callback_data=SearchCB(action="start").pack()),
         ],
-        [InlineKeyboardButton(text="🆕 أحدث التطبيقات", callback_data=LatestCB(page=0).pack())],
        # [InlineKeyboardButton(text="❤️ تطبيقاتي المفضلة", callback_data=FavsCB(page=0).pack())],
         [InlineKeyboardButton(text="📥 طلب تطبيق", callback_data=ReqCB(action="start", req_id=0).pack())],
         [
