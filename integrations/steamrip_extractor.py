@@ -66,6 +66,119 @@ def _normalize_url(url: str, base_url: str | None = None) -> str:
     return value
 
 
+def _normalize_image_url(url: str | None, base_url: str) -> str | None:
+    """طبّع رابط صورة حقيقي وتجاهل placeholders مثل data:image/base64."""
+    value = (url or "").strip()
+    if not value or value.lower().startswith(("data:", "blob:", "javascript:")):
+        return None
+
+    normalized = _normalize_url(value, base_url)
+    try:
+        parsed = urlsplit(normalized)
+    except Exception:
+        return None
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return normalized
+
+
+def _image_from_srcset(value: str | None, base_url: str) -> str | None:
+    """اختر أكبر صورة صالحة من srcset/data-srcset."""
+    if not value:
+        return None
+
+    candidates: list[tuple[float, str]] = []
+    for part in value.split(","):
+        item = part.strip()
+        if not item:
+            continue
+
+        pieces = item.split()
+        raw_url = pieces[0]
+        image_url = _normalize_image_url(raw_url, base_url)
+        if not image_url:
+            continue
+
+        score = 0.0
+        if len(pieces) > 1:
+            descriptor = pieces[1].lower()
+            try:
+                if descriptor.endswith("w"):
+                    score = float(descriptor[:-1])
+                elif descriptor.endswith("x"):
+                    # density descriptor؛ نعطيه وزناً حتى 2x يتغلب على 1x.
+                    score = float(descriptor[:-1]) * 10_000
+            except ValueError:
+                pass
+
+        candidates.append((score, image_url))
+
+    if not candidates:
+        return None
+
+    # عند غياب descriptors نحافظ على آخر URL، وهو غالباً النسخة الأكبر في WordPress.
+    return max(enumerate(candidates), key=lambda item: (item[1][0], item[0]))[1][1]
+
+
+def _extract_game_image(soup: BeautifulSoup, page_url: str) -> str | None:
+    """استخرج صورة اللعبة الحقيقية مع دعم lazy-loading في SteamRIP/WordPress.
+
+    بعض صفحات SteamRIP تضع صورة PNG صغيرة داخل ``src`` بصيغة ``data:image``
+    كـ placeholder، بينما الرابط الحقيقي يكون في ``data-lazy-src`` أو ``data-src``
+    أو ``srcset``. لذلك لا يجوز الاعتماد على ``src`` وحده.
+    """
+    image_elements = list(soup.select(".entry-content img"))
+    if not image_elements:
+        image_elements = list(soup.select("article img, main img"))
+    if not image_elements:
+        image_elements = list(soup.find_all("img"))
+
+    # أولاً: خصائص lazy-load المباشرة؛ هذه أدق من src لأن src قد يكون placeholder.
+    direct_attrs = (
+        "data-lazy-src",
+        "data-src",
+        "data-original",
+        "data-orig-src",
+        "data-cfsrc",
+    )
+    srcset_attrs = (
+        "data-lazy-srcset",
+        "data-srcset",
+        "srcset",
+    )
+
+    for img in image_elements:
+        for attr in direct_attrs:
+            image_url = _normalize_image_url(img.get(attr), page_url)
+            if image_url:
+                return image_url
+
+        for attr in srcset_attrs:
+            image_url = _image_from_srcset(img.get(attr), page_url)
+            if image_url:
+                return image_url
+
+        image_url = _normalize_image_url(img.get("src"), page_url)
+        if image_url:
+            return image_url
+
+    # fallback: metadata الاجتماعية عادة تحتوي الغلاف الحقيقي حتى لو كان المحتوى lazy.
+    for selector in (
+        'meta[property="og:image"]',
+        'meta[property="og:image:secure_url"]',
+        'meta[name="twitter:image"]',
+        'meta[property="twitter:image"]',
+    ):
+        meta = soup.select_one(selector)
+        if meta:
+            image_url = _normalize_image_url(meta.get("content"), page_url)
+            if image_url:
+                return image_url
+
+    return None
+
+
 def _host_matches_bzzhr(host: str) -> bool:
     host = host.lower().removeprefix("www.")
     return any(host == mirror or host.endswith("." + mirror) for mirror in BZZHR_MIRRORS)
@@ -257,10 +370,11 @@ async def fetch_game_data(page_url: str) -> dict:
     if size_match:
         size = size_match.group(1).strip()
 
-    image_url = None
-    img_el = soup.select_one(".entry-content img") or soup.find("img")
-    if img_el and img_el.get("src"):
-        image_url = _normalize_url(img_el["src"], final_page_url)
+    image_url = _extract_game_image(soup, final_page_url)
+    if image_url:
+        logger.info("SteamRIP game image found: %s", _safe_url_for_log(image_url))
+    else:
+        logger.warning("SteamRIP game image was not found for %s", final_page_url)
 
     download_buttons = soup.select(
         "a.shortc-button, "
