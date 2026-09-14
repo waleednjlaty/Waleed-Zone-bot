@@ -44,8 +44,8 @@ BZZHR_MIRRORS = (
     "buzzheavier.com",
 )
 
-BZZHR_DOWNLOAD_SELECTOR = 'a[hx-get*="/download"]'
-BZZHR_BROWSER_TIMEOUT_MS = 90_000
+BZZHR_BROWSER_TIMEOUT_MS = 30_000
+BZZHR_CLOUDFLARE_TIMEOUT_MS = 45_000
 
 # تشغيل متصفح Chromium واحد في كل مرة حتى لا تنفجر الذاكرة على Railway/Trial.
 _BZZHR_BROWSER_LOCK = asyncio.Lock()
@@ -112,6 +112,20 @@ def _looks_like_direct_download(url: str) -> bool:
 
     # BuzzHeavier يعيد حالياً token موقّعاً باسم v.
     return bool(parse_qs(parsed.query).get("v"))
+
+
+def _looks_like_cloudflare_challenge(status: int, html: str) -> bool:
+    """ميّز صفحة Cloudflare الحقيقية قبل تشغيل solver الثقيل."""
+    body = (html or "").lower()
+    markers = (
+        "cf-chl-",
+        "challenge-platform",
+        "cf-turnstile",
+        "just a moment",
+        "verify you are human",
+        "cloudflare ray id",
+    )
+    return status in {403, 429, 503} and any(marker in body for marker in markers)
 
 
 def _identify_server(url: str, text: str) -> str:
@@ -191,6 +205,18 @@ def _page_html(page: object) -> str:
         encoding = getattr(page, "encoding", None) or "utf-8"
         return body.decode(encoding, "replace")
     return str(body or getattr(page, "html_content", "") or "")
+
+
+def _source_referer(source_page_url: str | None) -> str | None:
+    if source_page_url and _is_steamrip_url(source_page_url):
+        return source_page_url
+    return None
+
+
+def _configured_proxy() -> str | None:
+    """Proxy اختياري للبيئات التي يحجب فيها المزود IP مركز البيانات."""
+    value = (os.getenv("BZZHR_PROXY_URL") or "").strip()
+    return value or None
 
 
 async def fetch_game_data(page_url: str) -> dict:
@@ -273,12 +299,25 @@ async def fetch_game_data(page_url: str) -> dict:
     }
 
 
-async def _resolve_candidate_fast(candidate_url: str) -> str | None:
+async def _resolve_candidate_fast(
+    candidate_url: str,
+    source_page_url: str | None = None,
+) -> str | None:
     """Fast path بدون Browser. ينجح إذا أعاد BZZHR الصفحة الحقيقية مباشرة."""
-    async with CurlAsyncSession(
-        impersonate="chrome",
-        headers=HEADERS,
-    ) as session:
+    session_headers = dict(HEADERS)
+    referer = _source_referer(source_page_url)
+    if referer:
+        session_headers["Referer"] = referer
+
+    session_kwargs: dict[str, object] = {
+        "impersonate": "chrome",
+        "headers": session_headers,
+    }
+    proxy = _configured_proxy()
+    if proxy:
+        session_kwargs["proxy"] = proxy
+
+    async with CurlAsyncSession(**session_kwargs) as session:
         page_response = await session.get(
             candidate_url,
             timeout=20,
@@ -292,6 +331,12 @@ async def _resolve_candidate_fast(candidate_url: str) -> str | None:
         )
 
         if page_response.status_code != 200:
+            location = page_response.headers.get("Location") or page_response.headers.get("location")
+            if location:
+                logger.info(
+                    "BZZHR fast redirect target: %s",
+                    _safe_url_for_log(_normalize_url(location, candidate_url)),
+                )
             return None
 
         page_url = str(page_response.url or candidate_url)
@@ -336,20 +381,34 @@ def _browser_fetch_hx_redirect(
     page_url: str,
     signed_download_url: str,
     timeout_ms: int,
+    source_page_url: str | None = None,
 ) -> str | None:
-    """نفذ fetch داخل نفس Browser context حتى تُستخدم جلسة/كوكيز Cloudflare نفسها."""
+    """نفذ HTMX داخل نفس Browser context والكوكيز التي فتحت صفحة الملف."""
     browser_page = context.new_page()
     try:
+        referer = _source_referer(source_page_url)
+        if referer:
+            browser_page.set_extra_http_headers({"Referer": referer})
+
         browser_page.goto(
             page_url,
             wait_until="domcontentloaded",
             timeout=timeout_ms,
         )
+
+        if not _is_bzzhr_url(browser_page.url):
+            logger.warning(
+                "BZZHR browser navigation left provider: %s",
+                _safe_url_for_log(browser_page.url),
+            )
+            return None
+
         result = browser_page.evaluate(
             """
             async ({ signedDownloadUrl, pageUrl }) => {
               const response = await fetch(signedDownloadUrl, {
                 method: 'GET',
+                credentials: 'same-origin',
                 redirect: 'manual',
                 headers: {
                   'Accept': '*/*',
@@ -397,8 +456,42 @@ def _browser_fetch_hx_redirect(
     return _direct_link_from_headers(headers, signed_download_url)
 
 
-def _resolve_candidates_with_browser_sync(candidates: list[str]) -> str | None:
-    """Browser fallback المطابق لتدفق الصفحة الحقيقي في BuzzHeavier."""
+def _browser_page_result(
+    page: object,
+    candidate: str,
+) -> tuple[str | None, bool]:
+    """أعد signed endpoint وهل الصفحة Cloudflare challenge."""
+    status = int(getattr(page, "status", 0) or 0)
+    page_url = str(getattr(page, "url", "") or candidate)
+    html = _page_html(page)
+
+    if not _is_bzzhr_url(page_url):
+        logger.warning(
+            "BZZHR browser page redirected outside provider: %s",
+            _safe_url_for_log(page_url),
+        )
+        return None, False
+
+    signed_endpoint = _extract_signed_download_endpoint(html, page_url)
+    if signed_endpoint:
+        return signed_endpoint, False
+
+    challenge = _looks_like_cloudflare_challenge(status, html)
+    if not challenge:
+        logger.warning(
+            "Signed BZZHR hx-get was not found for %s (HTTP %s)",
+            _safe_url_for_log(page_url),
+            status or "unknown",
+        )
+
+    return None, challenge
+
+
+def _resolve_candidates_with_browser_sync(
+    candidates: list[str],
+    source_page_url: str | None = None,
+) -> str | None:
+    """Browser fallback: تصفح عادي أولاً، وCloudflare solver فقط عند وجود challenge فعلي."""
     try:
         from scrapling.fetchers import StealthySession
     except ImportError:
@@ -409,14 +502,21 @@ def _resolve_candidates_with_browser_sync(candidates: list[str]) -> str | None:
         return None
 
     executable_path = os.getenv("SCRAPLING_EXECUTABLE_PATH") or None
+    referer = _source_referer(source_page_url)
+    proxy = _configured_proxy()
 
     session_kwargs: dict[str, object] = {
         "headless": True,
         "block_webrtc": True,
-        "solve_cloudflare": True,
+        "solve_cloudflare": False,
+        "google_search": False,
     }
     if executable_path:
         session_kwargs["executable_path"] = executable_path
+    if proxy:
+        session_kwargs["proxy"] = proxy
+
+    request_headers = {"Referer": referer} if referer else None
 
     with StealthySession(**session_kwargs) as session:
         for candidate in candidates:
@@ -425,81 +525,83 @@ def _resolve_candidates_with_browser_sync(candidates: list[str]) -> str | None:
                 _safe_url_for_log(candidate),
             )
 
-            for attempt in range(2):
+            try:
+                page = session.fetch(
+                    candidate,
+                    network_idle=False,
+                    solve_cloudflare=False,
+                    google_search=False,
+                    extra_headers=request_headers,
+                    timeout=BZZHR_BROWSER_TIMEOUT_MS,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "BZZHR browser normal fetch failed for %s: %s",
+                    _safe_url_for_log(candidate),
+                    exc,
+                )
+                continue
+
+            signed_endpoint, challenge = _browser_page_result(page, candidate)
+
+            # لا نشغّل Cloudflare solver بشكل أعمى. رسالة "No Cloudflare challenge found"
+            # من Scrapling تحصل عندما يُطلب solver لصفحة عادية، وتضيف تأخيراً كبيراً.
+            if not signed_endpoint and challenge:
+                logger.info(
+                    "Cloudflare challenge detected for %s; retrying with solver.",
+                    _safe_url_for_log(candidate),
+                )
                 try:
                     page = session.fetch(
                         candidate,
-                        network_idle=True,
-                        wait_selector=BZZHR_DOWNLOAD_SELECTOR,
-                        wait_selector_state="attached",
+                        network_idle=False,
                         solve_cloudflare=True,
-                        timeout=BZZHR_BROWSER_TIMEOUT_MS,
+                        google_search=False,
+                        extra_headers=request_headers,
+                        timeout=BZZHR_CLOUDFLARE_TIMEOUT_MS,
                     )
                 except Exception as exc:
                     logger.warning(
-                        "BZZHR browser page attempt %s failed for %s: %s",
-                        attempt + 1,
+                        "BZZHR Cloudflare retry failed for %s: %s",
                         _safe_url_for_log(candidate),
                         exc,
                     )
                     continue
 
-                status = int(getattr(page, "status", 0) or 0)
-                if status and not 200 <= status < 300:
-                    logger.warning(
-                        "BZZHR browser page HTTP %s for %s",
-                        status,
-                        _safe_url_for_log(candidate),
-                    )
-                    continue
+                signed_endpoint, _ = _browser_page_result(page, candidate)
 
-                page_url = str(getattr(page, "url", "") or candidate)
-                if not _is_bzzhr_url(page_url):
-                    logger.warning(
-                        "BZZHR browser page redirected outside provider: %s",
-                        _safe_url_for_log(page_url),
-                    )
-                    continue
+            if not signed_endpoint:
+                continue
 
-                signed_endpoint = _extract_signed_download_endpoint(
-                    _page_html(page),
-                    page_url,
-                )
-                if not signed_endpoint:
-                    logger.warning(
-                        "Signed BZZHR hx-get was not found for %s",
-                        _safe_url_for_log(page_url),
-                    )
-                    continue
+            page_url = str(getattr(page, "url", "") or candidate)
+            logger.info(
+                "Signed BZZHR endpoint found for %s",
+                _safe_url_for_log(page_url),
+            )
 
-                logger.info(
-                    "Signed BZZHR endpoint found for %s",
-                    _safe_url_for_log(page_url),
-                )
-
-                direct_link = _browser_fetch_hx_redirect(
-                    session.context,
-                    page_url,
-                    signed_endpoint,
-                    BZZHR_BROWSER_TIMEOUT_MS,
-                )
-                if direct_link:
-                    logger.info(
-                        "BZZHR direct link resolved successfully via browser."
-                    )
-                    return direct_link
+            direct_link = _browser_fetch_hx_redirect(
+                session.context,
+                page_url,
+                signed_endpoint,
+                BZZHR_BROWSER_TIMEOUT_MS,
+                source_page_url,
+            )
+            if direct_link:
+                logger.info("BZZHR direct link resolved successfully via browser.")
+                return direct_link
 
     return None
 
 
 async def extract_bzzhr_direct_link(
     bzzhr_url: str,
+    source_page_url: str | None = None,
 ) -> str | None:
     """استخرج رابط الملف المباشر من أي رابط BZZHR/BuzzHeavier صالح.
 
-    لا يوجد file-id ثابت هنا: الرابط يأتينا لحظياً من صفحة SteamRIP لكل لعبة.
-    نجرب HTTP سريعاً أولاً، ثم Browser stealth لحل صفحات الحماية والحصول على
-    hx-get الموقّع الحقيقي، وبعدها ننفذ طلب HTMX داخل نفس جلسة المتصفح.
+    file-id ديناميكي ويأتي من SteamRIP لكل لعبة. نجرب HTTP سريعاً أولاً ثم
+    Browser stealth. الـ Cloudflare solver لا يعمل إلا إذا ظهرت challenge حقيقية.
+    يمكن ضبط BZZHR_PROXY_URL اختيارياً إذا كانت IP بيئة الاستضافة محجوبة.
     """
     candidates = _bzzhr_candidates(bzzhr_url)
     if not candidates:
@@ -512,7 +614,7 @@ async def extract_bzzhr_direct_link(
                 "Trying BZZHR fast mirror: %s",
                 _safe_url_for_log(candidate),
             )
-            direct_link = await _resolve_candidate_fast(candidate)
+            direct_link = await _resolve_candidate_fast(candidate, source_page_url)
             if direct_link:
                 logger.info("BZZHR direct link resolved successfully via fast path.")
                 return direct_link
@@ -529,6 +631,7 @@ async def extract_bzzhr_direct_link(
             direct_link = await asyncio.to_thread(
                 _resolve_candidates_with_browser_sync,
                 candidates,
+                source_page_url,
             )
         except Exception:
             logger.exception(
