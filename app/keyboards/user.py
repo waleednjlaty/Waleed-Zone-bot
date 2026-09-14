@@ -148,18 +148,19 @@ def app_detail_keyboard(
             callback_data=AppCB(action="download", app_id=app_id).pack(),
         )],
     ]
-    kb.append(
-        [
-            InlineKeyboardButton(
-                text="💔 إزالة من المفضلة" if is_fav else "❤️ إضافة للمفضلة",
-                callback_data=AppCB(action="unfav" if is_fav else "fav", app_id=app_id).pack(),
-            ),
-            InlineKeyboardButton(
-                text="🔔 إشعارات",
-                callback_data=NotifCB(enabled=1).pack(),
-            ),
-        ]
-    )
+   # kb.append(
+    
+    #    [
+     ##       InlineKeyboardButton(
+            #    text="💔 إزالة من المفضلة" if is_fav else "❤️ إضافة للمفضلة",
+           #     callback_data=AppCB(action="unfav" if is_fav else "fav", app_id=app_id).pack(),
+          #  ),
+         #   InlineKeyboardButton(
+        #        text="🔔 إشعارات",
+       #         callback_data=NotifCB(enabled=1).pack(),
+      #      ),
+     #   ]
+    #)
     if is_admin_user:
         kb.append(
             [InlineKeyboardButton(
