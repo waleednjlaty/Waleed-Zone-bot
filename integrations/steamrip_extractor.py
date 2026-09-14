@@ -77,7 +77,7 @@ async def fetch_game_data(page_url: str) -> dict:
         "page_url": page_url,
         "servers": servers,
     }
-    import aiohttp
+import aiohttp
 from bs4 import BeautifulSoup
 
 async def extract_bzzhr_direct_link(bzzhr_url: str) -> str | None:
