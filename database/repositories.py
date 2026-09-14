@@ -236,6 +236,10 @@ async def set_application_active(
 
 
 async def delete_application(session: AsyncSession, app_id: int) -> None:
+    # حذف السجلات التابعة أولًا لأن قاعدة البيانات الحالية لا تستخدم
+    # ON DELETE CASCADE على downloads و favorites.
+    await session.execute(delete(Download).where(Download.app_id == app_id))
+    await session.execute(delete(Favorite).where(Favorite.app_id == app_id))
     await session.execute(delete(Application).where(Application.id == app_id))
     await session.flush()
 
