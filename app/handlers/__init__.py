@@ -18,8 +18,15 @@ from app.handlers import (
     start,
     upload,
 )
+from integrations.steamrip_metadata import fetch_game_data as fetch_steamrip_metadata
 
-from .steamrip import router as steamrip_router
+from . import steamrip as steamrip_module
+
+# اجعل تدفق /rip يستخدم طبقة metadata المحسنة. الدوال داخل steamrip.py تقرأ
+# fetch_game_data من globals وقت التنفيذ، لذلك الاستبدال هنا يطبّق على كل ألعاب
+# SteamRIP الجديدة بدون تكرار منطق الاستخراج داخل الـhandler.
+steamrip_module.fetch_game_data = fetch_steamrip_metadata
+steamrip_router = steamrip_module.router
 
 logger = logging.getLogger(__name__)
 
