@@ -107,7 +107,6 @@ def _image_from_srcset(value: str | None, base_url: str) -> str | None:
                 if descriptor.endswith("w"):
                     score = float(descriptor[:-1])
                 elif descriptor.endswith("x"):
-                    # density descriptor؛ نعطيه وزناً حتى 2x يتغلب على 1x.
                     score = float(descriptor[:-1]) * 10_000
             except ValueError:
                 pass
@@ -117,53 +116,93 @@ def _image_from_srcset(value: str | None, base_url: str) -> str | None:
     if not candidates:
         return None
 
-    # عند غياب descriptors نحافظ على آخر URL، وهو غالباً النسخة الأكبر في WordPress.
     return max(enumerate(candidates), key=lambda item: (item[1][0], item[0]))[1][1]
 
 
-def _extract_game_image(soup: BeautifulSoup, page_url: str) -> str | None:
-    """استخرج صورة اللعبة الحقيقية مع دعم lazy-loading في SteamRIP/WordPress.
+def _image_from_element(img: object, page_url: str) -> str | None:
+    """استخرج أفضل URL من عنصر img مع دعم lazy-loading وsrcset."""
+    getter = getattr(img, "get", None)
+    if getter is None:
+        return None
 
-    بعض صفحات SteamRIP تضع صورة PNG صغيرة داخل ``src`` بصيغة ``data:image``
-    كـ placeholder، بينما الرابط الحقيقي يكون في ``data-lazy-src`` أو ``data-src``
-    أو ``srcset``. لذلك لا يجوز الاعتماد على ``src`` وحده.
-    """
-    image_elements = list(soup.select(".entry-content img"))
-    if not image_elements:
-        image_elements = list(soup.select("article img, main img"))
-    if not image_elements:
-        image_elements = list(soup.find_all("img"))
-
-    # أولاً: خصائص lazy-load المباشرة؛ هذه أدق من src لأن src قد يكون placeholder.
-    direct_attrs = (
+    for attr in (
         "data-lazy-src",
         "data-src",
         "data-original",
         "data-orig-src",
         "data-cfsrc",
-    )
-    srcset_attrs = (
-        "data-lazy-srcset",
-        "data-srcset",
-        "srcset",
-    )
-
-    for img in image_elements:
-        for attr in direct_attrs:
-            image_url = _normalize_image_url(img.get(attr), page_url)
-            if image_url:
-                return image_url
-
-        for attr in srcset_attrs:
-            image_url = _image_from_srcset(img.get(attr), page_url)
-            if image_url:
-                return image_url
-
-        image_url = _normalize_image_url(img.get("src"), page_url)
+    ):
+        image_url = _normalize_image_url(getter(attr), page_url)
         if image_url:
             return image_url
 
-    # fallback: metadata الاجتماعية عادة تحتوي الغلاف الحقيقي حتى لو كان المحتوى lazy.
+    for attr in (
+        "data-lazy-srcset",
+        "data-srcset",
+        "srcset",
+    ):
+        image_url = _image_from_srcset(getter(attr), page_url)
+        if image_url:
+            return image_url
+
+    return _normalize_image_url(getter("src"), page_url)
+
+
+def _is_screenshot_image(img: object) -> bool:
+    """استبعد الصور الموجودة داخل أقسام screenshots/gallery/carousel."""
+    markers = ("screenshot", "screenshots", "gallery", "carousel", "slider")
+
+    for parent in getattr(img, "parents", []):
+        name = getattr(parent, "name", None)
+        if name in {"article", "main", "body", "html"}:
+            break
+
+        parent_id = str(getattr(parent, "get", lambda *_: "")("id") or "").lower()
+        classes = getattr(parent, "get", lambda *_: [] )("class") or []
+        if isinstance(classes, str):
+            classes = [classes]
+        signature = " ".join([parent_id, *[str(c).lower() for c in classes]])
+        if any(marker in signature for marker in markers):
+            return True
+
+    find_previous = getattr(img, "find_previous", None)
+    if find_previous:
+        heading = find_previous(["h2", "h3", "h4", "h5", "h6"])
+        if heading:
+            heading_text = heading.get_text(" ", strip=True).lower()
+            if "screenshot" in heading_text:
+                return True
+
+    return False
+
+
+def _extract_game_image(soup: BeautifulSoup, page_url: str) -> str | None:
+    """استخرج الغلاف/الصورة الرئيسية للعبة، وليس صور الـScreenshots.
+
+    SteamRIP قد يضع الغلاف خارج ``.entry-content`` بينما تكون صور الـScreenshots
+    داخله؛ لذلك لا يجوز أخذ أول صورة من المحتوى. الأولوية تكون للصورة المميزة
+    في القالب، ثم Open Graph، ثم صورة محتوى صالحة قبل قسم Screenshots.
+    """
+
+    # 1) صورة الغلاف/Featured image في قوالب WordPress الشائعة.
+    featured_selectors = (
+        "img.wp-post-image",
+        ".post-thumbnail img",
+        ".featured-image img",
+        ".featured-media img",
+        ".entry-image img",
+        ".single-featured-image-header img",
+        ".post-image img",
+        ".thumbnail img",
+    )
+    for selector in featured_selectors:
+        for img in soup.select(selector):
+            image_url = _image_from_element(img, page_url)
+            if image_url:
+                return image_url
+
+    # 2) WordPress/SEO plugins عادة تضع صورة الغلاف الحقيقية في metadata.
+    # نعطي og:image أولوية على صور .entry-content حتى لا نلتقط screenshot.
     for selector in (
         'meta[property="og:image"]',
         'meta[property="og:image:secure_url"]',
@@ -175,6 +214,20 @@ def _extract_game_image(soup: BeautifulSoup, page_url: str) -> str | None:
             image_url = _normalize_image_url(meta.get("content"), page_url)
             if image_url:
                 return image_url
+
+    # 3) fallback محافظ: صور المقال فقط، مع استبعاد أقسام screenshots/gallery.
+    image_elements = list(soup.select(".entry-content img"))
+    if not image_elements:
+        image_elements = list(soup.select("article img, main img"))
+    if not image_elements:
+        image_elements = list(soup.find_all("img"))
+
+    for img in image_elements:
+        if _is_screenshot_image(img):
+            continue
+        image_url = _image_from_element(img, page_url)
+        if image_url:
+            return image_url
 
     return None
 
@@ -223,7 +276,6 @@ def _looks_like_direct_download(url: str) -> bool:
     if len(parts) < 2 or parts[0] != "d":
         return False
 
-    # BuzzHeavier يعيد حالياً token موقّعاً باسم v.
     return bool(parse_qs(parsed.query).get("v"))
 
 
@@ -396,7 +448,6 @@ async def fetch_game_data(page_url: str) -> dict:
         if not href:
             continue
 
-        # لا نعيد روابط SteamRIP الداخلية كسيرفر تحميل.
         if _is_steamrip_url(href):
             continue
 
@@ -658,8 +709,6 @@ def _resolve_candidates_with_browser_sync(
 
             signed_endpoint, challenge = _browser_page_result(page, candidate)
 
-            # لا نشغّل Cloudflare solver بشكل أعمى. رسالة "No Cloudflare challenge found"
-            # من Scrapling تحصل عندما يُطلب solver لصفحة عادية، وتضيف تأخيراً كبيراً.
             if not signed_endpoint and challenge:
                 logger.info(
                     "Cloudflare challenge detected for %s; retrying with solver.",
@@ -739,7 +788,6 @@ async def extract_bzzhr_direct_link(
                 exc,
             )
 
-    # المتصفح ثقيل؛ لا نشغّل أكثر من نسخة في نفس process.
     async with _BZZHR_BROWSER_LOCK:
         try:
             direct_link = await asyncio.to_thread(
