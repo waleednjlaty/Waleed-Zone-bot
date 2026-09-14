@@ -17,9 +17,15 @@ from app.keyboards.user import (
     favorites_keyboard,
     latest_keyboard,
 )
+from app.utils.catalog import (
+    MOBILE_GAME_CATEGORY,
+    PC_GAME_CATEGORY,
+    app_matches_category,
+    visible_categories,
+)
 from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB, MainMenuCB
 from app.utils.helpers import paginate
-from app.utils.text import app_card, escape_html
+from app.utils.text import escape_html
 from database import repositories as repo
 from integrations.steamrip_extractor import extract_bzzhr_direct_link, fetch_game_data
 
@@ -32,10 +38,16 @@ PER_PAGE = 8
 
 @router.callback_query(AppsCB.filter(F.category == "cats"))
 async def on_categories(call: CallbackQuery, session: AsyncSession) -> None:
-    cats = await repo.list_categories(session)
+    # نبني قائمة التصنيفات من التطبيقات نفسها حتى نقدر نفصل السجلات القديمة
+    # التي كانت محفوظة باسم Games/ألعاب حسب نظام التشغيل.
+    apps = await repo.list_applications(session, active_only=True, limit=1000)
+    cats = visible_categories(apps)
     await call.answer()
     await call.message.edit_text(
-        "🗂 اختر التصنيف:", reply_markup=categories_keyboard(cats)
+        "🗂 اختر القسم:\n\n"
+        "🖥️ ألعاب كمبيوتر: Windows / Linux / macOS\n"
+        "📱 ألعاب موبايل: Android / iOS",
+        reply_markup=categories_keyboard(cats),
     )
 
 
@@ -45,18 +57,29 @@ async def on_apps_list(
 ) -> None:
     await call.answer()
     category = callback_data.category
+
     if category == "all":
         apps = await repo.list_latest(session, limit=100)
+    elif category in {PC_GAME_CATEGORY, MOBILE_GAME_CATEGORY}:
+        # دعم السجلات الجديدة والقديمة معاً بدون Migration لقاعدة البيانات.
+        all_apps = await repo.list_applications(session, active_only=True, limit=1000)
+        apps = [app for app in all_apps if app_matches_category(app, category)]
     else:
         apps = await repo.list_by_category(session, category, limit=100)
 
     page, total_pages = paginate(len(apps), callback_data.page, PER_PAGE)
     chunk = apps[page * PER_PAGE : (page + 1) * PER_PAGE]
 
-    header = "📱 التطبيقات"
-    if category != "all":
+    if category == PC_GAME_CATEGORY:
+        header = "🖥️ ألعاب الكمبيوتر"
+    elif category == MOBILE_GAME_CATEGORY:
+        header = "📱 ألعاب الموبايل"
+    elif category == "all":
+        header = "📱 جميع التطبيقات والألعاب"
+    else:
         header = f"🗂 تصنيف: {escape_html(category)}"
-    text = f"{header}\n────────────\n" if chunk else "لا توجد تطبيقات في هذا التصنيف."
+
+    text = f"{header}\n────────────\n" if chunk else "لا توجد تطبيقات في هذا القسم."
     kb = apps_list_keyboard(chunk, category, page, total_pages)
     await call.message.edit_text(text, reply_markup=kb)
 
