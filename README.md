@@ -1,164 +1,179 @@
 # Waleed Zone Bot
 
-بوت تيليجرام متكامل لإدارة ونشر التطبيقات. يتيح البوت للمالك رفع التطبيقات، وإدارة محتوى القناة، والإشراف على المجموعة الملحقة، بينما يوفر للمستخدمين واجهة سهلة للبحث عن التطبيقات وطلبها.
+[العربية](README_AR.md) · [Quick start](QUICK_START.md) · [Documentation](DOCUMENTATION_INDEX.md)
 
-## ✨ الميزات الرئيسية
+A production-oriented Telegram bot for publishing and managing apps and games in the Waleed Zone community. It provides a searchable catalog for users, an admin workflow for uploads and publishing, request management, favorites, group moderation, and optional external storage/link integrations.
 
-- **إدارة التطبيقات**: رفع وتعديل وحذف التطبيقات عبر واجهة إدارية.
-- **نظام رفع متكامل**: استلام الملف من تيليجرام، رفعه إلى `DevUploads`، وتقصير الرابط عبر `ShrinkMe` (اختياري).
-- **واجهة مستخدم سهلة**:
-  - البحث عن التطبيقات بالاسم.
-  - تصفح أحدث التطبيقات والتطبيقات حسب الفئة.
-  - نظام المفضلة لحفظ التطبيقات.
-- **نظام طلبات**: يمكن للمستخدمين طلب تطبيقات جديدة، ويستطيع المالك إدارتها.
-- **إدارة المجموعة**:
-  - رسالة ترحيب بالأعضاء الجدد.
-  - نظام حماية من التكرار (Anti-Flood) والكلمات الممنوعة.
-  - أوامر إشراف للمشرفين (حظر، كتم، تحذير، حذف رسائل).
-- **نظام إشعارات**: إرسال إشعارات للمستخدمين عند إضافة تطبيق جديد.
-- **جاهز للتشغيل**: إعدادات سهلة عبر Docker Compose للتشغيل في بيئة الإنتاج.
+## Features
 
-## 📂 هيكل الشيفرة المصدرية
+- Browse, search, and save apps
+- Submit and manage app requests
+- Admin panel for creating, editing, deleting, and publishing entries
+- Telegram file download and external upload workflow
+- Optional DevUploads, ShrinkMe, and ImgBB integrations
+- SteamRIP game-link extraction
+- Welcome messages, anti-flood controls, blocked-word filters, warnings, mute, and ban tools
+- SQLite for local development and PostgreSQL support for deployment
+- Docker and Docker Compose support
+- Async architecture built with aiogram and SQLAlchemy
 
-تم تصميم المشروع ليتبع مبدأ فصل المسؤوليات (Separation of Concerns)، مما يجعله منظمًا وسهل الصيانة والتطوير.
+## Tech stack
 
-```
-/
-├── app/                  # الشيفرة المصدرية الرئيسية للتطبيق
-│   ├── handlers/         # معالجات رسائل وأحداث تيليجرام (aiogram Routers)
-│   │   ├── start.py      # معالج أمر /start والقائمة الرئيسية
-│   │   ├── upload.py     # معالجات تدفق رفع التطبيقات (للمالك)
-│   │   ├── search.py     # معالج البحث عن التطبيقات
-│   │   ├── requests.py   # معالجات طلبات التطبيقات من المستخدمين
-│   │   ├── group.py      # معالجات خاصة بالمجموعة (إشراف، ترحيب)
-│   │   └── ...           # ملفات أخرى مثل common.py, admin.py
-│   │
-│   ├── services/         # منطق الأعمال (Business Logic) المنفصل
-│   │   ├── group_service.py # خدمات إدارة المجموعات (حماية، تحذير)
-│   │   └── upload_service.py# خدمة تنسيق عملية رفع الملفات
-│   │
-│   ├── middlewares/      # الوسطاء (Middlewares) لمعالجة الطلبات
-│   │   ├── DbSessionMiddleware.py # لإدارة جلسات قاعدة البيانات
-│   │   ├── AccessMiddleware.py    # للتحقق من صلاحيات المستخدم
-│   │   └── ThrottleMiddleware.py  # لمنع إغراق البوت
-│   │
-│   ├── states/           # تعريف حالات FSM (Finite State Machine)
-│   ├── keyboards/        # وحدات لإنشاء لوحات مفاتيح تيليجرام
-│   └── utils/            # أدوات مساعدة، ثوابت، ونصوص
-│       ├── constants.py  # ثوابت المشروع (CallbackData, أسماء)
-│       ├── helpers.py    # دوال مساعدة متنوعة
-│       ├── text.py       # قوالب النصوص التي تظهر للمستخدم
-│       └── logging_config.py # إعدادات تسجيل الأحداث (Logging)
-│
-├── database/             # كل ما يتعلق بقاعدة البيانات
-│   ├── repositories.py   # دوال للتعامل مع البيانات (CRUD)
-│   ├── database.py       # إعداد الاتصال وإدارة الجلسات
-│   └── models.py         # تعريف جداول قاعدة البيانات (SQLAlchemy models)
-│
-├── integrations/         # التكامل مع خدمات خارجية (APIs)
-│   ├── devupload.py      # عميل للتعامل مع DevUploads API
-│   └── shrankme.py       # عميل للتعامل مع ShrinkMe API
-│
-├── tests/                # الاختبارات الآلية (Unit & Integration Tests)
-│   ├── conftest.py       # إعدادات وموارد مشتركة للاختبارات
-│   └── test_repositories.py # مثال على اختبارات دوال قاعدة البيانات
-│
-├── data/                 # لتخزين البيانات الدائمة (مثل قاعدة بيانات SQLite)
-├── tmp/                  # لتخزين الملفات المؤقتة المرفوعة
-├── logs/                 # لتخزين ملفات السجلات
-│
-├── main.py               # نقطة الدخول الرئيسية لتشغيل البوت
-├── config.py             # تحميل الإعدادات من المتغيرات البيئية
-├── README.md             # ملف التوثيق (هذا الملف)
-├── requirements.txt      # قائمة المكتبات التي يعتمد عليها المشروع
-├── .env                  # ملف المتغيرات البيئية (يحتوي على الأسرار)
-├── .env.example          # مثال على ملف المتغيرات البيئية
-└── docker-compose.yml    # ملف تعريف Docker Compose لتسهيل التشغيل
-```
+- Python 3.12
+- aiogram 3
+- SQLAlchemy 2
+- SQLite / PostgreSQL
+- httpx and aiohttp
+- Docker
 
-## المتطلبات
-- Python 3.10+
-- Docker و Docker Compose (مستحسن للإنتاج)
-- مفاتيح API للخدمات المستخدمة (DevUploads, ShrinkMe).
+## Quick start
 
-## ⚙️ إعداد المتغيرات البيئية
-
-انسخ الملف `.env.example` إلى `.env` واملأ القيم الحساسة:
-- `BOT_TOKEN` — توكن البوت من @BotFather
-- `ADMIN_IDS` — معرفات المالك مفصولة بفواصل (مثال: `12345,67890`)
-- `DATABASE_URL` — رابط قاعدة البيانات (مثلاً `sqlite+aiosqlite:///data/bot.db` عند استخدام Docker)
-- `DEVUPLOAD_API_KEY` — مفتاح DevUploads API
-- `SHRANKME_API_KEY` — مفتاح ShrinkMe API
-- `CHANNEL_ID` — معرف القناة (للنشر)
-- `GROUP_ID` — معرف المجموعة (للحماية)
-- `MAX_UPLOAD_BYTES` — أقصى حجم للملفات المرفوعة بالبايت.
-
-## 🚀 التشغيل بواسطة Docker Compose (مستحسن)
-
-هذه هي الطريقة الموصى بها لتشغيل البوت في بيئة الإنتاج.
+### 1. Clone the repository
 
 ```bash
-# 1. أنشئ مجلدات محلية مطلوبة لتخزين البيانات الدائمة
-mkdir -p data tmp logs
-
-# 2. انسخ ملف الإعدادات واملأ القيم
-cp .env.example .env
-# nano .env # (أو أي محرر نصوص آخر)
-
-# 3. بناء وتشغيل الحاوية في الخلفية
-docker compose up --build -d
-
-# 4. لمشاهدة السجلات
-docker compose logs -f
-
-# 5. لإيقاف البوت
-docker compose down
+git clone https://github.com/waleednjlaty/waleed-zone-bot.git
+cd waleed-zone-bot
 ```
 
-التكوين الحالي يقوم بتركيب `./data` داخل الحاوية كمساحة لتحزين `bot.db` وملفات أخرى، ويخزن الملفات المرفوعة في `./tmp/uploads`.
+If the repository has not been renamed yet, use `MyTelegramBot` in the URL and directory name.
 
-## تشغيل بدون Docker (اختياري)
-1. أنشئ venv وثبت المتطلبات:
+### 2. Create a virtual environment
 
-آمل أن تكون هذه التغييرات مفيدة لك. إذا كان لديك أي أسئلة أخرى أو تحتاج إلى مساعدة في جزء آخر من الكود، فلا تتردد في السؤال!
-
-<!--
-[PROMPT_SUGGESTION]اشرح لي كيف يعمل الوسيط `DbSessionMiddleware` بالتفصيل.[/PROMPT_SUGGESTION]
-[PROMPT_SUGGESTION]كيف يمكنني إضافة أمر جديد `/stats` يعرض إحصائيات عن عدد التطبيقات والمستخدمين؟[/PROMPT_SUGGESTION]
--->
-
-آمل أن يكون هذا التوضيح مفيدًا لك. إذا كان لديك أي استفسارات أخرى حول أي جزء من الكود، فلا تتردد في السؤال!
-
-<!--
-[PROMPT_SUGGESTION]اشرح لي كيف يعمل الوسيط `DbSessionMiddleware` بالتفصيل.[/PROMPT_SUGGESTION]
-[PROMPT_SUGGESTION]كيف يمكنني إضافة أمر جديد `/stats` يعرض إحصائيات عن عدد التطبيقات والمستخدمين؟[/PROMPT_SUGGESTION]
--->
-   **ملاحظة:** تأكد من وجود Python 3.10 أو أحدث.
+Linux/macOS:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. Install dependencies
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-2. أنشئ `.env` كما ذُكر أعلاه، ثم شغّل البوت:
+### 4. Configure the bot
+
+```bash
+cp .env.example .env
+```
+
+On Windows:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Open `.env` and provide at least:
+
+```env
+BOT_TOKEN=your_bot_token
+ADMIN_IDS=123456789
+DATABASE_URL=sqlite+aiosqlite:///data/bot.db
+```
+
+Never commit your real `.env` file or API tokens.
+
+### 5. Run
 
 ```bash
 python main.py
 ```
 
-## systemd unit (مثال لنشر في VPS باستخدام Docker Compose)
-إن أردت تشغيل `docker compose` عبر systemd، يمكنك استخدام ملف وحدة مثل `deploy/waleed-zone-bot.service`.
+Then open the bot in Telegram and send `/start`.
 
-## ملاحظات حول ShrinkMe
-- خدمة `shrinkme.io` قد تكون تحت صيانة — إن لم تُرجع API رابطًا، سيُحفظ رابط DevUploads فقط.
+## Configuration
 
-## خطوات لاحقة موصى بها
-- إعداد مراقب (Prometheus / logrotate) إذا كنت بحاجة لسجلات طويلة.
-- إعداد نسخة احتياطية من `./data` بانتظام.
+| Variable | Required | Purpose |
+|---|---:|---|
+| `BOT_TOKEN` | Yes | Telegram bot token from [@BotFather](https://t.me/BotFather) |
+| `ADMIN_IDS` | Recommended | Comma-separated Telegram user IDs allowed to use admin features |
+| `DATABASE_URL` | Yes | SQLAlchemy database URL |
+| `CHANNEL_ID` / `CHANNEL_USERNAME` | For publishing | Target Telegram channel |
+| `GROUP_ID` / `GROUP_USERNAME` | For moderation | Community group |
+| `DEVUPLOAD_API_KEY` | Optional | Upload files to DevUploads |
+| `SHRANKME_API_KEY` | Optional | Shorten published download links |
+| `IMGBB_API_KEY` | Optional | Host or migrate images |
+| `MAX_UPLOAD_BYTES` | Optional | Maximum accepted upload size |
+| `DOWNLOAD_DIR` | Optional | Temporary upload directory |
+
+See [`.env.example`](.env.example) for every supported setting.
+
+## Docker
+
+```bash
+cp .env.example .env
+mkdir -p data tmp/uploads logs
+docker compose up --build -d
+docker compose logs -f
+```
+
+Stop the service with:
+
+```bash
+docker compose down
+```
+
+## Tests and linting
+
+```bash
+pip install pytest pytest-asyncio ruff
+pytest
+ruff check .
+```
+
+## Project structure
+
+```text
+.
+├── app/
+│   ├── handlers/       # Telegram commands, messages, and callbacks
+│   ├── keyboards/      # Inline and reply keyboards
+│   ├── middlewares/    # Database, access, and throttling layers
+│   ├── services/       # Application logic
+│   ├── states/         # FSM states
+│   └── utils/          # Text, constants, logging, and helpers
+├── config/             # Environment-backed settings
+├── database/           # Models, sessions, and repositories
+├── integrations/       # DevUploads, ImgBB, ShrinkMe, SteamRIP, Telegram
+├── scripts/            # Maintenance and migration scripts
+├── tests/              # Automated tests
+├── deploy/             # Deployment configuration
+├── main.py             # Application entry point
+└── docker-compose.yml
+```
+
+## Documentation
+
+- [Start here](START_HERE.md)
+- [Beginner's guide](BEGINNERS_GUIDE.md)
+- [Local development](LOCAL_DEVELOPMENT.md)
+- [Bot architecture](BOT_ARCHITECTURE.md)
+- [Visual architecture map](ARCHITECTURE_VISUAL_MAP.md)
+- [Advanced usage](ADVANCED_USAGE.md)
+- [Local testing checklist](LOCAL_TESTING_CHECKLIST.md)
+- [Railway deployment](RAILWAY_DEPLOYMENT.md)
+- [Pre-deployment checklist](PRE_DEPLOYMENT_CHECKLIST.md)
+
+## Security notes
+
+- Keep bot tokens and API keys only in environment variables.
+- Rotate a token immediately if it is exposed in a commit, log, screenshot, or chat.
+- Review admin IDs and Telegram permissions before deploying.
+- Back up persistent database data before upgrades.
+
+## Contributing
+
+Issues and pull requests are welcome. For large changes, open an issue first and describe the proposed behavior.
 
 ---
-جاهز للمساعدة في خطوة التشغيل التالية: تفضّل أن أعدّل `.env` معك أو أنشئ ملف `deploy/waleed-zone-bot.service`؟
-#   m y t e l e b o t  
- #   m y t e l e b o t  
- 
+
+Built and maintained by [Waleed Al-Najlat](https://github.com/waleednjlaty).
