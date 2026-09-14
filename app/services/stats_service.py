@@ -2,10 +2,30 @@
 
 from __future__ import annotations
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import repositories as repo
 from database.models import Application
+from config import get_settings
+
+
+async def website_stats() -> dict[str, int] | None:
+    settings = get_settings()
+    if not settings.WEBSITE_STATS_URL or not settings.WEBSITE_STATS_TOKEN:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(
+                settings.WEBSITE_STATS_URL,
+                headers={"Authorization": f"Bearer {settings.WEBSITE_STATS_TOKEN}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+            keys = ("visitors", "applications", "published", "downloads", "views")
+            return {key: int(data.get(key, 0) or 0) for key in keys}
+    except (httpx.HTTPError, ValueError, TypeError):
+        return None
 
 
 async def global_stats(session: AsyncSession) -> str:
@@ -19,6 +39,7 @@ async def global_stats(session: AsyncSession) -> str:
     requests = await repo.count_requests(session)
     pending = await repo.count_pending_requests(session)
     warnings = await repo.count_warnings(session)
+    site = await website_stats()
 
     return (
         "📊 إحصائيات البوت\n"
@@ -32,7 +53,15 @@ async def global_stats(session: AsyncSession) -> str:
         f"📅 عمليات بحث اليوم: {searches_today}\n"
         f"📥 طلبات التطبيقات: {requests}\n"
         f"⏳ طلبات معلقة: {pending}\n"
-        f"⚠️ تحذيرات المجموعة: {warnings}"
+        f"⚠️ تحذيرات المجموعة: {warnings}\n\n"
+        "====================\n"
+        "🌐 إحصائيات الموقع\n"
+        "====================\n"
+        f"👀 زوار الموقع: {site['visitors'] if site else 'غير متصل'}\n"
+        f"📱 تطبيقات الموقع: {site['applications'] if site else 'غير متصل'}\n"
+        f"📢 منشور في الموقع: {site['published'] if site else 'غير متصل'}\n"
+        f"📥 تحميلات الموقع: {site['downloads'] if site else 'غير متصل'}\n"
+        f"👁 مشاهدات التطبيقات: {site['views'] if site else 'غير متصل'}"
     )
 
 
