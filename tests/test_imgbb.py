@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 from app.services.image_migration import _needs_migration
-from integrations.imgbb import is_imgbb_url
+from integrations.imgbb import _extract_imgbb_error, is_imgbb_url
 
 
 def test_imgbb_url_detection():
@@ -27,3 +27,30 @@ def test_imgbb_image_does_not_migrate_again():
         devupload_url="https://steamrip.com/game-free-download/",
     )
     assert not _needs_migration(app)
+
+
+def test_imgbb_forbidden_response_is_parsed():
+    code, message = _extract_imgbb_error(
+        {
+            "message": "You have been forbidden to use this website.",
+            "code": 103,
+        }
+    )
+
+    assert code == 103
+    assert message == "You have been forbidden to use this website."
+
+
+def test_nested_imgbb_error_is_parsed():
+    code, message = _extract_imgbb_error(
+        {
+            "error": {
+                "message": "Invalid API key",
+                "code": 100,
+            },
+            "status_txt": "Bad Request",
+        }
+    )
+
+    assert code == 100
+    assert message == "Invalid API key"
