@@ -5,31 +5,37 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.utils.constants import AdminCB, AppCB, BannedWordCB, MainMenuCB, ReqCB
-from app.utils.helpers import paginate
+
+
+def _button(text: str, callback_data: str) -> InlineKeyboardButton:
+    """إنشاء زر موحّد لتقليل أخطاء بناء أزرار لوحة الإدارة."""
+    return InlineKeyboardButton(text=text, callback_data=callback_data)
 
 
 def admin_panel_keyboard() -> InlineKeyboardMarkup:
     kb = [
-        [InlineKeyboardButton(text="📊 الإحصائيات", callback_data=AdminCB(action="stats", page=0).pack())],
-        [InlineKeyboardButton(text="🚀 رفع تطبيق", callback_data=AppCB(action="upload", app_id=0).pack())],
-        [InlineKeyboardButton(text="🎮 إضافة لعبة (SteamRIP)", callback_data=AdminCB(action="add_rip_game", page=0).pack())],
-        [InlineKeyboardButton(text="📱 إدارة التطبيقات", callback_data=AdminCB(action="apps", page=0).pack())],
-        [InlineKeyboardButton(text="📥 طلبات التطبيقات", callback_data=AdminCB(action="requests", page=0).pack())],
-        [InlineKeyboardButton(text="📢 نشر في القناة", callback_data=AdminCB(action="publish_select", page=0).pack())],
-        [InlineKeyboardButton(text="🖼 ترحيل الصور", callback_data=AdminCB(action="migrate_images", page=0).pack())],
-        [InlineKeyboardButton(text="👥 إدارة الجروب", callback_data=AdminCB(action="group", page=0).pack())],
-        [InlineKeyboardButton(text="📣 إرسال إعلان", callback_data=AdminCB(action="broadcast", page=0).pack())],
-        [InlineKeyboardButton(text="⚙️ إعدادات", callback_data=AdminCB(action="settings", page=0).pack())],
-        [InlineKeyboardButton(text="🏠 القائمة الرئيسية", callback_data=MainMenuCB(action="main").pack())],
+        [_button("📊 الإحصائيات", AdminCB(action="stats", page=0).pack()),
+         _button("⚙️ الإعدادات", AdminCB(action="settings", page=0).pack())],
+        [_button("🚀 رفع تطبيق", AppCB(action="upload", app_id=0).pack()),
+         _button("🎮 إضافة لعبة", AdminCB(action="add_rip_game", page=0).pack())],
+        [_button("📱 إدارة التطبيقات", AdminCB(action="apps", page=0).pack()),
+         _button("📥 طلبات التطبيقات", AdminCB(action="requests", page=0).pack())],
+        [_button("📢 نشر في القناة", AdminCB(action="publish_select", page=0).pack()),
+         _button("🖼 ترحيل الصور", AdminCB(action="migrate_images", page=0).pack())],
+        [_button("👥 إدارة المجموعة", AdminCB(action="group", page=0).pack()),
+         _button("📣 إرسال إعلان", AdminCB(action="broadcast", page=0).pack())],
+        [_button("🏠 القائمة الرئيسية", MainMenuCB(action="main").pack())],
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
 def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
     kb: list[list[InlineKeyboardButton]] = []
+    if not apps:
+        kb.append([_button("📭 لا توجد تطبيقات", "noop")])
     for app in apps:
         kb.append(
-            [InlineKeyboardButton(
+            [_button(
                 text=f"{'🚫 ' if not app.active else ''}📱 {app.name}",
                 callback_data=AdminCB(action="app_manage", app_id=app.id, page=page).pack(),
             )]
@@ -37,19 +43,19 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     if total_pages > 1:
         nav: list[InlineKeyboardButton] = []
         if page > 0:
-            nav.append(InlineKeyboardButton(text="⬅️", callback_data=AdminCB(action="apps", page=page - 1).pack()))
-        nav.append(InlineKeyboardButton(text=f"📄 {page + 1}/{total_pages}", callback_data="noop"))
+            nav.append(_button("⬅️ السابق", AdminCB(action="apps", page=page - 1).pack()))
+        nav.append(_button(f"📄 {page + 1}/{total_pages}", "noop"))
         if page < total_pages - 1:
-            nav.append(InlineKeyboardButton(text="➡️", callback_data=AdminCB(action="apps", page=page + 1).pack()))
+            nav.append(_button("التالي ➡️", AdminCB(action="apps", page=page + 1).pack()))
         kb.append(nav)
     kb.append(
         [
-            InlineKeyboardButton(text="➕ إضافة تطبيق", callback_data=AdminCB(action="add_app", page=0).pack()),
-            InlineKeyboardButton(text="🎮 إضافة لعبة SteamRIP", callback_data=AdminCB(action="add_rip_game", page=0).pack()),
+            _button("➕ إضافة تطبيق", AdminCB(action="add_app", page=0).pack()),
+            _button("🎮 إضافة لعبة", AdminCB(action="add_rip_game", page=0).pack()),
         ]
     )
     kb.append(
-        [InlineKeyboardButton(text="⚙️ لوحة الإدارة", callback_data=AdminCB(action="panel", page=0).pack())]
+        [_button("⚙️ لوحة الإدارة", AdminCB(action="panel", page=0).pack())]
     )
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
@@ -89,6 +95,8 @@ def delete_confirm_keyboard(app_id: int, page: int) -> InlineKeyboardMarkup:
 
 def requests_keyboard(requests: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
     kb: list[list[InlineKeyboardButton]] = []
+    if not requests:
+        kb.append([_button("📭 لا توجد طلبات حالياً", "noop")])
     for i, req in enumerate(requests, start=page * 10 + 1):
         kb.append(
             [InlineKeyboardButton(
@@ -127,6 +135,8 @@ def request_manage_keyboard(req_id: int) -> InlineKeyboardMarkup:
 
 def publish_select_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
     kb: list[list[InlineKeyboardButton]] = []
+    if not apps:
+        kb.append([_button("📭 لا توجد تطبيقات للنشر", "noop")])
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
