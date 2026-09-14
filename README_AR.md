@@ -1,232 +1,181 @@
-## ⚡ ملخص كامل: من الصفر للبوت يعمل
+# بوت Waleed Zone
 
-**أسرع طريقة لتشغيل البوت يعمل بـ 5 أوامر فقط:**
+[English](README.md) · [البدء السريع](QUICK_START.md) · [دليل التوثيق](DOCUMENTATION_INDEX.md)
 
----
+بوت تيليجرام متكامل لإدارة ونشر التطبيقات والألعاب في مجتمع Waleed Zone. يوفر للمستخدمين كتالوجًا قابلًا للبحث، وللمشرف لوحة لإدارة المحتوى ورفعه ونشره، إضافة إلى الطلبات والمفضلة وأدوات حماية المجموعة.
 
-## 🚀 3 دقائق = بوت يعمل
+## المزايا
+
+- تصفح التطبيقات والألعاب والبحث عنها وحفظها في المفضلة
+- إرسال طلبات التطبيقات وإدارتها
+- إضافة المحتوى وتعديله وحذفه ونشره من لوحة المشرف
+- تنزيل الملفات من تيليجرام ورفعها إلى خدمة خارجية
+- تكاملات اختيارية مع DevUploads وShrinkMe وImgBB
+- استخراج روابط الألعاب من SteamRIP
+- رسائل ترحيب وحماية من الإغراق وكلمات ممنوعة وتحذير وكتم وحظر
+- دعم SQLite محليًا وPostgreSQL عند النشر
+- دعم Docker وDocker Compose
+- بنية غير متزامنة باستخدام aiogram وSQLAlchemy
+
+## التقنيات
+
+- Python 3.12
+- aiogram 3
+- SQLAlchemy 2
+- SQLite / PostgreSQL
+- httpx وaiohttp
+- Docker
+
+## التشغيل السريع
+
+### 1. تنزيل المشروع
 
 ```bash
-# 1. أنشئ بيئة
-python -m venv venv
+git clone https://github.com/waleednjlaty/waleed-zone-bot.git
+cd waleed-zone-bot
+```
 
-# 2. فعّلها
-.\venv\Scripts\Activate.ps1
+إذا لم تتم إعادة تسمية الريبو بعد، استخدم `MyTelegramBot` بدل `waleed-zone-bot`.
 
-# 3. ثبّت المتطلبات
+### 2. إنشاء البيئة الافتراضية
+
+على Linux وmacOS:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+على Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. تثبيت المتطلبات
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-
-# 4. عدّل .env (أضف BOT_TOKEN)
-copy .env.example .env
-# افتح .env وأضف: BOT_TOKEN=من_BotFather
-
-# 5. شغّل!
-python main.py
 ```
 
-**وخلاص! البوت يعمل الآن!** ✅
+### 4. إعداد المتغيرات
 
----
-
-## 📱 اختبر على تيليجرام
-
-```
-ابحث عن اسم البوت (من BotFather)
-أرسل: /start
-شوف القائمة الرئيسية ✓
-```
-
----
-
-## 🗺️ خريطة البوت البسيطة
-
-```
-User on Telegram
-        ↓
-   Telegram API
-        ↓
-   Dispatcher (aiogram)
-        ↓
-   Handler (معالج الأمر)
-        ↓
-   Service (منطق العمل)
-        ↓
-   Database (حفظ البيانات)
-        ↓
-   Response to User
-```
-
----
-
-## 📊 معمارية البوت من الداخل
-
-```
-├── handlers/      ← معالج /start, البحث, الرفع
-├── services/      ← منطق تجاري معقد
-├── database/      ← جداول والعمليات
-├── middlewares/   ← فحوصات أمان
-└── integrations/  ← الخدمات الخارجية (Telegram, ImgBB, ...)
-```
-
----
-
-## 📚 ملفات التوثيق المتاحة
-
-**للمبتدئين:**
-- `BEGINNERS_GUIDE.md` ← ابدأ هنا إذا جديد
-- `QUICK_START.md` ← ملخص سريع
-
-**للفهم:**
-- `BOT_ARCHITECTURE.md` ← شرح كيف يعمل البوت
-- `ARCHITECTURE_VISUAL_MAP.md` ← خرائط بصرية
-
-**للتطوير:**
-- `LOCAL_DEVELOPMENT.md` ← تطوير محلي تفصيلي
-- `LOCAL_TESTING_CHECKLIST.md` ← اختبر كل ميزة
-
-**للإنتاج:**
-- `RAILWAY_DEPLOYMENT.md` ← نشر على الإنترنت
-- `PRE_DEPLOYMENT_CHECKLIST.md` ← قائمة تحقق
-
-**للمساعدة:**
-- `DOCUMENTATION_INDEX.md` ← أي ملف تقرأ؟
-- `ADVANCED_USAGE.md` ← استخدامات متقدمة
-
----
-
-## ⚙️ الملفات المهمة في المشروع
-
-```
-main.py                ← 🎯 نقطة البدء
-.env                   ← 🔐 الأسرار (أضف TOKENك هنا)
-.env.example           ← 📋 قالب، انسخه إلى .env
-requirements.txt       ← 📦 المكتبات المطلوبة
-bot.db                 ← 🗄️ قاعدة البيانات (تُنشأ تلقائياً)
-```
-
----
-
-## 🔑 البيانات المطلوبة
-
-| البيان | الحصول عليها من | المثال |
-|--------|-----------|--------|
-| BOT_TOKEN | [BotFather](https://t.me/botfather) → /newbot | `8418114419:AAF...` |
-| ADMIN_IDS | أي بوت → /id | `7215167792` |
-| IMGBB_API_KEY | [imgbb.com/api](https://imgbb.com/api) | `a0a3a3988c...` |
-
----
-
-## 🐛 مشاكل سريعة
-
-| المشكلة | الحل |
-|--------|-----|
-| Python not found | ثبّت من python.org |
-| (venv) لم يظهر | اشتغل: `.\venv\Scripts\Activate.ps1` |
-| ModuleNotFoundError | اشتغل: `pip install -r requirements.txt` |
-| BOT_TOKEN غير موجود | أضفه في `.env` |
-| Bot freezes | اضغط Ctrl+C وأعد التشغيل |
-
----
-
-## 📊 سير العمل بـ Step بـ Step
+على Linux وmacOS:
 
 ```bash
-Step 1: python -m venv venv          # بيئة
-Step 2: .\venv\Scripts\Activate.ps1  # تفعيل
-Step 3: pip install -r requirements  # مكتبات
-Step 4: copy .env.example .env       # إعدادات
-Step 5: echo BOT_TOKEN=... >> .env   # البيانات
-Step 6: python main.py               # شغّيل!
-Step 7: أرسل /start على البوت       # اختبار
+cp .env.example .env
 ```
 
----
+على Windows:
 
-## 🎓 فهم البوت بـ 30 ثانية
-
-البوت يستقبل الرسائل والأزرار من تيليجرام، يعالجها، ويرد عليها.
-
-```
-1. User يكتب /start
-         ↓
-2. Dispatcher يستقبل الأمر
-         ↓
-3. Handler يُعالج الطلب
-         ↓
-4. Service يُنفذ المنطق
-         ↓  
-5. Database يحفظ البيانات
-         ↓
-6. Response يُرجع للمستخدم
-
-النتيجة: مستخدم سعيد! ✅
+```powershell
+Copy-Item .env.example .env
 ```
 
----
+ضع على الأقل القيم التالية داخل `.env`:
 
-## ✅ تحقق أن كل شيء يعمل
-
-```bash
-# البوت يعمل؟
-python main.py
-# يجب ترى: ✅ Waleed Zone Bot is running...
-
-# على تيليجرام تظهر القائمة؟
-# أرسل /start
-
-# كل شيء ✓
-# جاهز للتطوير!
+```env
+BOT_TOKEN=your_bot_token
+ADMIN_IDS=123456789
+DATABASE_URL=sqlite+aiosqlite:///data/bot.db
 ```
 
----
+لا ترفع ملف `.env` الحقيقي أو مفاتيح API إلى GitHub.
 
-## 🎯 الخطوات التالية
-
-بعد التشغيل الناجح:
-
-1. **فهم البنية**: اقرأ `BOT_ARCHITECTURE.md`
-2. **اختبار الميزات**: اتبع `LOCAL_TESTING_CHECKLIST.md`
-3. **تطوير أكثر**: عدّل `app/handlers/`
-4. **نشر للإنتاج**: اقرأ `RAILWAY_DEPLOYMENT.md`
-
----
-
-## 💻 أوامر مفيدة
-
-```bash
-# عرض السجلات بتفاصيل
-python -u main.py 2>&1 | tee bot.log
-
-# حذف قاعدة البيانات (إعادة ابتداء)
-rm bot.db
-python main.py
-
-# اختبار قاعدة البيانات
-sqlite3 bot.db ".tables"
-
-# ترحيل الصور (اختياري)
-python scripts/migrate_images.py
-```
-
----
-
-## 🎉 تم!
-
-أنت الآن قادر على:
-- ✅ تشغيل البوت محلياً
-- ✅ فهم معمارية البوت
-- ✅ اختبار الميزات
-- ✅ التطوير والتعديل
-- ✅ النشر على الإنتاج
-
-**شغّل البوت الآن!** 🚀
+### 5. تشغيل البوت
 
 ```bash
 python main.py
 ```
 
+افتح البوت في تيليجرام وأرسل `/start`.
+
+## الإعدادات
+
+| المتغير | مطلوب؟ | وظيفته |
+|---|---:|---|
+| `BOT_TOKEN` | نعم | توكن البوت من [@BotFather](https://t.me/BotFather) |
+| `ADMIN_IDS` | مستحسن | معرّفات المشرفين مفصولة بفواصل |
+| `DATABASE_URL` | نعم | رابط قاعدة البيانات بصيغة SQLAlchemy |
+| `CHANNEL_ID` و`CHANNEL_USERNAME` | للنشر | القناة التي يُنشر إليها المحتوى |
+| `GROUP_ID` و`GROUP_USERNAME` | للإشراف | مجموعة المجتمع |
+| `DEVUPLOAD_API_KEY` | اختياري | رفع الملفات إلى DevUploads |
+| `SHRANKME_API_KEY` | اختياري | اختصار روابط التنزيل |
+| `IMGBB_API_KEY` | اختياري | استضافة الصور أو ترحيلها |
+| `MAX_UPLOAD_BYTES` | اختياري | الحد الأعلى لحجم الملف |
+| `DOWNLOAD_DIR` | اختياري | مسار الملفات المؤقتة |
+
+جميع الخيارات موجودة في [`.env.example`](.env.example).
+
+## التشغيل عبر Docker
+
+```bash
+cp .env.example .env
+mkdir -p data tmp/uploads logs
+docker compose up --build -d
+docker compose logs -f
+```
+
+لإيقافه:
+
+```bash
+docker compose down
+```
+
+## الاختبارات وفحص جودة الكود
+
+```bash
+pip install pytest pytest-asyncio ruff
+pytest
+ruff check .
+```
+
+## بنية المشروع
+
+```text
+.
+├── app/
+│   ├── handlers/       # الأوامر والرسائل والأزرار
+│   ├── keyboards/      # لوحات المفاتيح
+│   ├── middlewares/    # قاعدة البيانات والصلاحيات ومنع الإغراق
+│   ├── services/       # منطق العمل
+│   ├── states/         # حالات FSM
+│   └── utils/          # النصوص والثوابت والسجلات والأدوات
+├── config/             # إعدادات البيئة
+├── database/           # النماذج والجلسات وعمليات البيانات
+├── integrations/       # الخدمات الخارجية
+├── scripts/            # الصيانة والترحيل
+├── tests/              # الاختبارات
+├── deploy/             # ملفات النشر
+├── main.py             # نقطة التشغيل
+└── docker-compose.yml
+```
+
+## التوثيق الإضافي
+
+- [ابدأ من هنا](START_HERE.md)
+- [دليل المبتدئ](BEGINNERS_GUIDE.md)
+- [التطوير المحلي](LOCAL_DEVELOPMENT.md)
+- [معمارية البوت](BOT_ARCHITECTURE.md)
+- [الخريطة البصرية للمعمارية](ARCHITECTURE_VISUAL_MAP.md)
+- [الاستخدام المتقدم](ADVANCED_USAGE.md)
+- [قائمة اختبار محلية](LOCAL_TESTING_CHECKLIST.md)
+- [النشر على Railway](RAILWAY_DEPLOYMENT.md)
+- [قائمة ما قبل النشر](PRE_DEPLOYMENT_CHECKLIST.md)
+
+## الأمان
+
+- احتفظ بالتوكنات والمفاتيح داخل متغيرات البيئة فقط.
+- إذا ظهر مفتاح في commit أو سجل أو صورة، ألغِه وأنشئ بديلًا فورًا.
+- راجع معرّفات المشرفين وصلاحيات البوت قبل النشر.
+- خذ نسخة احتياطية من قاعدة البيانات قبل التحديثات.
+
+## المساهمة
+
+المشكلات وطلبات الدمج مرحب بها. للتغييرات الكبيرة، افتح Issue واشرح السلوك المقترح أولًا.
+
 ---
 
-**ملاحظة سريعة**: كل ملف من ملفات التوثيق يحتوي معلومات مفصلة.
-اقرأها عند الحاجة. الآن ركّز على `python main.py` فقط! ⚡
-
+طُوّر ويُصان بواسطة [وليد النجلات](https://github.com/waleednjlaty).
