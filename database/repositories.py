@@ -131,6 +131,7 @@ async def create_application(
         platform=platform,
         developer=developer,
         icon_file_id=icon_file_id,
+        image_url=image_url,
         devupload_url=devupload_url,
         shrankme_url=shrankme_url,
         search_text=search_text,
