@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from integrations.steamrip_extractor import fetch_game_data
-from app.keyboards.steamrip import build_dynamic_servers_keyboard
+# لاحظ هنا أضفنا استدعاء الدالة الجديدة التي صنعناها في الخطوة 2
+from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link
 from app.keyboards.user import cancel_keyboard
 from app.utils.helpers import is_admin, escape_html, build_search_text
 from app.utils.constants import AdminCB
@@ -30,31 +30,85 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
         await call.answer("❌ لم يتم العثور على رابط المصدر.", show_alert=True)
         return
 
-    await call.answer("⏳ جاري توليد روابط تحميل جديدة...")
+    # رسالة الانتظار أثناء عملية الدخول والاختراق للصفحات
+    await call.message.edit_text("⏳ جاري البحث عن سيرفر BZZHR وسحب الرابط المباشر...")
 
     try:
         game_data = await fetch_game_data(app.devupload_url)
         servers = game_data.get("servers", {})
         
         if not servers:
-            await call.message.answer("⚠️ السيرفرات قيد التحديث في المصدر حالياً، يرجى إعادة المحاولة بعد قليل.")
+            await call.message.edit_text("⚠️ السيرفرات قيد التحديث في المصدر حالياً، يرجى إعادة المحاولة بعد قليل.")
             return
 
-        reply_markup = build_dynamic_servers_keyboard(servers, app_id)
+        # 1. البحث عن سيرفر BZZHR من القائمة
+        bzzhr_url = None
+        for server_name, server_url in servers.items():
+            if "BZZHR" in server_name.upper():
+                bzzhr_url = server_url
+                break
         
-        caption = (
-            f"🎮 **{escape_html(app.name)}**\n"
-            f"💾 **الحجم:** {escape_html(app.size or game_data.get('size') or '—')}\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"⚡ تم استخراج أحدث روابط السيرفرات المباشرة:\n"
-            f"👇 اضغط على السيرفر المناسب لبدء التحميل فوراً:"
-        )
-
-        await call.message.answer(caption, reply_markup=reply_markup)
+        # 2. في حال العثور على BZZHR: ندخل ونسحب الرابط
+        if bzzhr_url:
+            direct_link = await extract_bzzhr_direct_link(bzzhr_url)
+            
+            if direct_link:
+                markup = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📥 بدء التحميل المباشر", url=direct_link)],
+                    [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")]
+                ])
+                await call.message.edit_text(
+                    f"🎮 **{escape_html(app.name)}**\n"
+                    f"💾 **الحجم:** {escape_html(app.size or game_data.get('size') or '—')}\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"✅ تم العثور على الرابط المباشر من سيرفر **BZZHR** بنجاح.",
+                    reply_markup=markup
+                )
+            else:
+                await call.message.edit_text(
+                    "❌ تعذر استخراج الرابط المباشر من صفحة BZZHR. قد يكون الموقع غير تصميم الصفحة.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")]
+                    ])
+                )
+                
+        # 3. في حال لم يتم العثور على BZZHR إطلاقاً
+        else:
+            markup = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔍 بحث في منصة أخرى", switch_inline_query_current_chat=f"{app.name}")],
+                [InlineKeyboardButton(text="➕ إضافة رابط تحميل (للإدمن)", callback_data=f"add_custom_link:{app_id}")],
+                [InlineKeyboardButton(text="🔙 رجوع للملف", callback_data=f"app:view:{app_id}")]
+            ])
+            await call.message.edit_text(
+                f"⚠️ **سيرفر BZZHR غير متوفر لهذه اللعبة.**\n\n"
+                f"لم يتم العثور على السيرفر المطلوب للعبة **{escape_html(app.name)}**.\n"
+                f"يرجى تحديد إجراء بديل:",
+                reply_markup=markup
+            )
 
     except Exception as exc:
         logger.error("Live scrape failed: %s", exc)
-        await call.message.answer(f"❌ تعذر جلب الروابط: {escape_html(str(exc))}")
+        await call.message.edit_text(f"❌ تعذر جلب الروابط:\n`{escape_html(str(exc))}`")
+
+
+@router.callback_query(F.data.startswith("add_custom_link:"))
+async def on_add_custom_link(call: CallbackQuery, state: FSMContext) -> None:
+    """معالجة زر 'إضافة رابط تحميل' للإدمن في حال لم يجد BZZHR"""
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔ صلاحية غير متاحة. هذا الخيار للإدارة فقط.", show_alert=True)
+        return
+        
+    app_id = int(call.data.split(":")[1])
+    await state.update_data(target_app_id=app_id)
+    
+    from app.states import UploadStates
+    await state.set_state(UploadStates.waiting_remote_url)
+    
+    await call.message.edit_text(
+        "🔗 **إضافة رابط تحميل مخصص**\n\n"
+        "أرسل الرابط المباشر الذي ترغب بإضافته لهذه اللعبة الآن:",
+        reply_markup=cancel_keyboard()
+    )
 
 
 @router.callback_query(AdminCB.filter(F.action == "add_rip_game"))
@@ -110,7 +164,7 @@ async def on_quick_publish_rip(message: Message, session: AsyncSession) -> None:
             f"🎮 الاسم: `{game['title']}`\n"
             f"💾 الحجم: `{game['size']}`\n"
             f"🆔 ID التطبيق: `{app.id}`\n\n"
-            f"💡 الروابط ستتولد لحظياً للمستخدمين عند ضغط زر التحميل."
+            f"💡 عندما يضغط المستخدمون على زر التحميل، سيقوم البوت بسحب رابط BZZHR المباشر حصرياً."
         )
 
     except Exception as exc:

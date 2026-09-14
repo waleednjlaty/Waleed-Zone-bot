@@ -77,3 +77,36 @@ async def fetch_game_data(page_url: str) -> dict:
         "page_url": page_url,
         "servers": servers,
     }
+    import aiohttp
+from bs4 import BeautifulSoup
+
+async def extract_bzzhr_direct_link(bzzhr_url: str) -> str | None:
+    """
+    الدخول إلى صفحة BZZHR واستخراج رابط التحميل المباشر من زر 'Copy download link'
+    """
+    try:
+        async with aiohttp.ClientSession() as session:
+            # إضافة ترويسة (Headers) لتبدو كمتصفح حقيقي وتفادي الحظر
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            async with session.get(bzzhr_url, headers=headers, timeout=20) as response:
+                if response.status != 200:
+                    return None
+                
+                html = await response.text()
+                soup = BeautifulSoup(html, "html.parser")
+                
+                # البحث عن الزر بجميع الطرق الممكنة في BZZHR
+                for el in soup.find_all(['a', 'button']):
+                    text = el.get_text(strip=True).lower()
+                    
+                    if "copy download link" in text or "copy" in text or "download" in text:
+                        if el.name == 'a' and el.get('href') and not el['href'].startswith('#'):
+                            return el['href']
+                        elif el.get('data-clipboard-text'):
+                            return el['data-clipboard-text']
+                            
+                return None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"فشل استخراج الرابط من BZZHR: {e}")
+        return None
