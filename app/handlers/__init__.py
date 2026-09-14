@@ -24,14 +24,14 @@ from .steamrip import router as steamrip_router
 logger = logging.getLogger(__name__)
 
 
-async def _handle_telegram_bad_request(event: ErrorEvent) -> bool:
+async def _handle_telegram_bad_request(event: ErrorEvent) -> None:
     """تجاهل فقط خطأ Telegram الحميد عند محاولة إرسال نفس التعديل مرتين."""
     exc = event.exception
     message = str(exc).lower()
 
     if isinstance(exc, TelegramBadRequest) and "message is not modified" in message:
         logger.debug("Ignored harmless Telegram 'message is not modified' error")
-        return True
+        return
 
     raise exc
 
