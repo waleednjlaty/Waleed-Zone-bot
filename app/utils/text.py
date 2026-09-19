@@ -10,7 +10,7 @@ from .helpers import format_size, human_time
 APP_DOWNLOAD_FOOTER = (
     "━━━━━━━━━━━━━━\n"
     "🎮 لتحميل الألعاب والتطبيقات بسهولة:\n"
-    "🤖 البوت: @Waleed_zone_bot\n"
+    "🤖 البوت: @Waleedzone_bot\n"
     "🌐 الموقع: https://waleed-zone.up.railway.app/"
 )
 
