@@ -672,6 +672,7 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
         bot_username = ""
 
     deep_link = f"https://t.me/{bot_username}?start=app_{app.id}" if bot_username else ""
+    download_url = deep_link or app.shrankme_url or app.devupload_url or ""
 
     text = (
         "━━━━━━━━━━━━━━\n"
@@ -680,16 +681,20 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
         f"💾 الحجم: {escape_html(app.size or '—')}\n"
         f"📱 النظام: {escape_html(app.platform or '—')}\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"📝 {escape_html(app.description or '')}\n\n"
-        "⬇️ اضغط الزر لتحميل التطبيق"
+        f"📝 {escape_html(app.description or '')}"
     )
     text = append_app_footer(text)
 
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 تحميل الآن", url=deep_link or (app.shrankme_url or ""))]
-        ]
-    )
+    if download_url:
+        text += (
+            "\n\n━━━━━━━━━━━━━━\n"
+            "⬇️ <b>تحميل التطبيق</b> ⬇️\n\n"
+            f'<a href="{escape_html(download_url)}"><b>🟢 اضغط هنا لبدء التحميل الآن 🟢</b></a>\n\n'
+            "━━━━━━━━━━━━━━"
+        )
+    else:
+        text += "\n\n⚠️ لا يوجد رابط تحميل متاح."
+
     try:
         # ألعاب SteamRIP تحفظ الغلاف الدائم في image_url، بينما التطبيقات القديمة
         # قد تملك Telegram file_id فقط. نستخدم الغلاف الدائم أولاً ثم file_id.
@@ -699,10 +704,9 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
                 settings.CHANNEL_ID,
                 photo=photo,
                 caption=text,
-                reply_markup=kb,
             )
         else:
-            await call.bot.send_message(settings.CHANNEL_ID, text, reply_markup=kb)
+            await call.bot.send_message(settings.CHANNEL_ID, text)
         app.published = True
         await session.flush()
         await call.message.answer("📢 تم نشر التطبيق في القناة بنجاح.")
