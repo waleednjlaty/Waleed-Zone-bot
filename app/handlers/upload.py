@@ -45,7 +45,7 @@ from app.utils.helpers import (
     is_admin,
     sanitize_filename,
 )
-from app.utils.text import append_app_footer, escape_html
+from app.utils.text import append_app_footer, download_link_block, escape_html
 from config import get_settings
 from database import repositories as repo
 from integrations import (
@@ -632,13 +632,12 @@ async def on_confirm_app(call: CallbackQuery, state: FSMContext, session: AsyncS
     if app.devupload_url:
         success_text += f"🔗 رابط Dev Upload:\n{escape_html(app.devupload_url)}\n"
     if final_url:
-        success_text += f"\n🔗 رابط التحميل الجاهز:\n{escape_html(final_url)}"
+        success_text += "\n\n" + download_link_block(final_url)
     else:
         success_text += "\n⚠️ لا يوجد رابط تحميل متاح."
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📋 نسخ الرابط", url=final_url)] if final_url else [],
             [InlineKeyboardButton(text="📥 تحميل تطبيق اخر", callback_data=AppCB(action="upload", app_id=0).pack())],
             [InlineKeyboardButton(text="📱 إدارة التطبيقات", callback_data=AdminCB(action="apps", page=0).pack())],
         ]
@@ -734,20 +733,14 @@ async def _notify_new_app(call: CallbackQuery, app, session: AsyncSession) -> No
     text = append_app_footer(text)
 
     bot_username = await _bot_username(call)
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📥 فتح التطبيق",
-                    url=f"https://t.me/{bot_username}?start=app_{app.id}",
-                )
-            ]
-        ]
-    )
+    if bot_username:
+        app_link = f"https://t.me/{bot_username}?start=app_{app.id}"
+        text += "\n\n" + download_link_block(app_link, title="فتح التطبيق")
+
     sent = 0
     for user in users[:200]:
         try:
-            await call.bot.send_message(user.telegram_id, text, reply_markup=kb)
+            await call.bot.send_message(user.telegram_id, text)
             sent += 1
         except Exception:
             pass
