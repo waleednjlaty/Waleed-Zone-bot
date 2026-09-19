@@ -25,7 +25,7 @@ from app.utils.catalog import (
 )
 from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB, MainMenuCB
 from app.utils.helpers import paginate
-from app.utils.text import escape_html
+from app.utils.text import download_link_block, escape_html
 from database import repositories as repo
 from integrations.steamrip_extractor import extract_bzzhr_direct_link, fetch_game_data
 
@@ -213,7 +213,6 @@ async def on_download(
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📥 رابط التحميل", url=url)],
             [
                 InlineKeyboardButton(
                     text="🏠 القائمة",
@@ -224,8 +223,8 @@ async def on_download(
     )
     text = (
         f"⬇️ رابط تحميل {escape_html(app.name)}\n\n"
-        "✅ الرابط المباشر جاهز.\n"
-        "اضغط على «📥 رابط التحميل» لبدء التنزيل من المتصفح."
+        "✅ الرابط المباشر جاهز.\n\n"
+        + download_link_block(url)
     )
 
     if status_msg:
