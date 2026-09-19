@@ -20,7 +20,7 @@ from app.utils.constants import (
     REQUIRED_PLATFORMS,
 )
 from app.utils.helpers import build_search_text, escape_html, is_admin
-from app.utils.text import append_app_footer
+from app.utils.text import append_app_footer, download_link_block
 from config import get_settings
 from database import repositories as repo
 from integrations.imgbb import ImgBBUploader
@@ -326,20 +326,11 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
         f"💾 الحجم: {escape_html(app.size or '—')}\n"
         f"💻 النظام: {escape_html(app.platform or '—')}\n"
         "━━━━━━━━━━━━━━\n\n"
-        f"📝 {escape_html(app.description or '')}\n\n"
-        "⬇️ اضغط الزر لتحميل اللعبة"
+        f"📝 {escape_html(app.description or '')}"
     )
     text = append_app_footer(text)
-
-    kb = (
-        InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🚀 تحميل الآن", url=deep_link)]
-            ]
-        )
-        if deep_link
-        else None
-    )
+    if deep_link:
+        text += "\n\n" + download_link_block(deep_link, title="تحميل اللعبة")
 
     photo = app.image_url or app.icon_file_id
 
@@ -349,10 +340,9 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
                 settings.CHANNEL_ID,
                 photo=photo,
                 caption=text,
-                reply_markup=kb,
             )
         else:
-            await call.bot.send_message(settings.CHANNEL_ID, text, reply_markup=kb)
+            await call.bot.send_message(settings.CHANNEL_ID, text)
         await call.message.answer("📢 تم نشر اللعبة في القناة بنجاح.")
     except Exception:
         logger.exception("SteamRIP channel publish failed")
@@ -370,12 +360,14 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
     if app.shrankme_url:
         markup = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="📥 بدء التحميل المباشر", url=app.shrankme_url)],
                 [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
             ]
         )
         await call.message.edit_text(
-            f"🎮 {escape_html(app.name)}\n━━━━━━━━━━━━━━━━━━━\n✅ تم تجهيز الرابط المباشر للعبة.",
+            f"🎮 {escape_html(app.name)}\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "✅ تم تجهيز الرابط المباشر للعبة.\n\n"
+            + download_link_block(app.shrankme_url, title="تحميل اللعبة"),
             reply_markup=markup,
         )
         return
@@ -415,7 +407,6 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
             if direct_link:
                 markup = InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [InlineKeyboardButton(text="📥 بدء التحميل المباشر", url=direct_link)],
                         [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
                     ]
                 )
@@ -423,7 +414,8 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
                     f"🎮 {escape_html(app.name)}\n"
                     f"💾 الحجم: {escape_html(app.size or game_data.get('size') or '—')}\n"
                     "━━━━━━━━━━━━━━━━━━━\n"
-                    "✅ تم العثور على الرابط المباشر من BZZHR بنجاح.",
+                    "✅ تم العثور على الرابط المباشر من BZZHR بنجاح.\n\n"
+                    + download_link_block(direct_link, title="تحميل اللعبة"),
                     reply_markup=markup,
                 )
                 return
