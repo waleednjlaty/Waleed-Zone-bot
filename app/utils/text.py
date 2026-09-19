@@ -25,6 +25,18 @@ def append_app_footer(text: str) -> str:
     return f"{clean}\n\n{APP_DOWNLOAD_FOOTER}"
 
 
+def download_link_block(url: str, *, title: str = "تحميل التطبيق") -> str:
+    """رابط تحميل واضح داخل نص الرسالة بدل زر URL أسفلها."""
+    safe_url = escape_html(url).replace('"', "&quot;")
+    safe_title = escape_html(title)
+    return (
+        "━━━━━━━━━━━━━━\n"
+        f"⬇️ <b>{safe_title}</b> ⬇️\n\n"
+        f'<a href="{safe_url}"><b>🟢 اضغط هنا لبدء التحميل الآن 🟢</b></a>\n\n'
+        "━━━━━━━━━━━━━━"
+    )
+
+
 def escape_html(text: str | None) -> str:
     if not text:
         return ""
