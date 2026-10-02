@@ -46,6 +46,7 @@ from app.utils.helpers import (
     sanitize_filename,
 )
 from app.utils.text import append_app_footer, download_link_block, escape_html
+from app.utils.website import website_app_url
 from config import get_settings
 from database import repositories as repo
 from integrations import (
@@ -672,6 +673,7 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
 
     deep_link = f"https://t.me/{bot_username}?start=app_{app.id}" if bot_username else ""
     download_url = deep_link or app.shrankme_url or app.devupload_url or ""
+    site_url = website_app_url(app.id)
 
     text = (
         "━━━━━━━━━━━━━━\n"
@@ -693,6 +695,8 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
         )
     else:
         text += "\n\n⚠️ لا يوجد رابط تحميل متاح."
+    if site_url:
+        text += f'\n\n🌐 <a href="{escape_html(site_url)}">صفحة التطبيق على Waleed Zone</a>'
 
     try:
         # ألعاب SteamRIP تحفظ الغلاف الدائم في image_url، بينما التطبيقات القديمة
@@ -708,7 +712,13 @@ async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -
             await call.bot.send_message(settings.CHANNEL_ID, text)
         app.published = True
         await session.flush()
-        await call.message.answer("📢 تم نشر التطبيق في القناة بنجاح.")
+        if site_url:
+            await call.message.answer(
+                "📢 تم نشر التطبيق في القناة بنجاح.\n"
+                f"🌐 صفحة الموقع: {escape_html(site_url)}"
+            )
+        else:
+            await call.message.answer("📢 تم نشر التطبيق في القناة بنجاح.")
     except Exception as exc:
         logger.warning("Channel publish failed: %s", exc)
         await call.message.answer("❌ فشل النشر في القناة. تأكد أن البوت أدمن في القناة.")
