@@ -41,6 +41,7 @@ from app.utils.constants import (
 )
 from app.utils.helpers import is_admin, parse_int, paginate
 from app.utils.text import app_card, escape_html
+from app.utils.website import website_app_url
 from config import get_settings
 from database import repositories as repo
 
@@ -152,7 +153,12 @@ async def on_app_manage(
         return
     await call.message.edit_text(
         app_card(app),
-        reply_markup=app_manage_keyboard(app.id, app.active, callback_data.page),
+        reply_markup=app_manage_keyboard(
+            app.id,
+            app.active,
+            callback_data.page,
+            website_url=website_app_url(app.id) if app.published else None,
+        ),
     )
 
 
