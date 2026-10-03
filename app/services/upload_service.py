@@ -13,13 +13,19 @@ def channel_username(value: str | None) -> str:
     return name
 
 
-def files_channel(settings) -> tuple[int, str]:
+def files_channel(settings) -> tuple[int | None, str]:
     explicit = settings.FILES_CHANNEL_ID is not None or bool(settings.FILES_CHANNEL_USERNAME)
-    chat_id = settings.FILES_CHANNEL_ID if explicit else settings.CHANNEL_ID
-    username = settings.FILES_CHANNEL_USERNAME if explicit else settings.CHANNEL_USERNAME
+    if explicit:
+        username = channel_username(settings.FILES_CHANNEL_USERNAME)
+        chat_id = settings.FILES_CHANNEL_ID
+        if chat_id is not None and (not isinstance(chat_id, int) or isinstance(chat_id, bool) or chat_id >= 0):
+            raise ValueError("FILES_CHANNEL_NOT_CONFIGURED")
+        return chat_id, username
+    chat_id = settings.CHANNEL_ID
+    username = channel_username(settings.CHANNEL_USERNAME)
     if not isinstance(chat_id, int) or isinstance(chat_id, bool) or chat_id >= 0:
         raise ValueError("FILES_CHANNEL_NOT_CONFIGURED")
-    return chat_id, channel_username(username)
+    return chat_id, username
 
 
 def validate_source(source: dict) -> None:
@@ -50,12 +56,20 @@ class UploadService:
         if not document:
             raise ValueError("DOCUMENT_REQUIRED")
         settings = get_settings()
-        chat_id, username = files_channel(settings)
+        configured_chat_id, username = files_channel(settings)
         if document.file_size and document.file_size > settings.MAX_UPLOAD_BYTES:
             raise ValueError("FILE_TOO_LARGE")
-        # Verify that the public username and numeric ID refer to the SAME channel.
-        chat = await message.bot.get_chat(chat_id)
-        if chat.type != ChatType.CHANNEL or chat.id != chat_id or channel_username(chat.username) != username or chat.has_protected_content:
+        # Resolve by public username when no numeric ID is configured, then pin the
+        # exact resolved ID into metadata. This keeps mobile setup simple while still
+        # verifying that the public username maps to the actual destination channel.
+        lookup = configured_chat_id if configured_chat_id is not None else f"@{username}"
+        chat = await message.bot.get_chat(lookup)
+        if chat.type != ChatType.CHANNEL or channel_username(chat.username) != username or chat.has_protected_content:
+            raise ValueError("FILES_CHANNEL_MISMATCH")
+        chat_id = chat.id
+        if not isinstance(chat_id, int) or isinstance(chat_id, bool) or chat_id >= 0:
+            raise ValueError("FILES_CHANNEL_MISMATCH")
+        if configured_chat_id is not None and chat_id != configured_chat_id:
             raise ValueError("FILES_CHANNEL_MISMATCH")
         source = {"telegram_chat_id":chat_id,"telegram_message_id":1,
             "telegram_channel_username":username,"telegram_file_id":document.file_id,
