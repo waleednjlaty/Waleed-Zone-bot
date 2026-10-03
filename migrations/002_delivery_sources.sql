@@ -25,8 +25,18 @@ CREATE TABLE IF NOT EXISTS site_delivery_sources (
 );
 CREATE OR REPLACE FUNCTION wz_catalog_revision() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-  NEW.revision := OLD.revision + 1;
-  NEW.updated_at := clock_timestamp();
+  -- Traffic counters must not invalidate a countdown or an owner's open form.
+  -- Explicit revision/timestamp updates (including source changes) still advance.
+  IF (to_jsonb(NEW) - ARRAY['views','downloads','revision','updated_at']) IS DISTINCT FROM
+     (to_jsonb(OLD) - ARRAY['views','downloads','revision','updated_at'])
+     OR NEW.revision IS DISTINCT FROM OLD.revision
+     OR NEW.updated_at IS DISTINCT FROM OLD.updated_at THEN
+    NEW.revision := OLD.revision + 1;
+    NEW.updated_at := clock_timestamp();
+  ELSE
+    NEW.revision := OLD.revision;
+    NEW.updated_at := OLD.updated_at;
+  END IF;
   RETURN NEW;
 END $$;
 CREATE OR REPLACE TRIGGER wz_catalog_revision BEFORE UPDATE ON applications

@@ -6,7 +6,7 @@ Both repositories own the same PostgreSQL `applications` catalog. Neither client
 
 `migrations/002_delivery_sources.sql` is identical in both PRs. Apply it once, explicitly, after review. This change does not apply production migrations. PostgreSQL bot startup checks existing schema without running DDL; SQLite remains a local test/development option only.
 
-`applications.revision` is advanced by a PostgreSQL BEFORE UPDATE trigger. `updated_at` is also maintained by the database. Every source insert/update/delete advances the parent application revision. Legacy `shrankme_url` and `devupload_url` remain intact. SteamRIP continues to use `devupload_url` as its source page, not an upload-service URL.
+`applications.revision` is advanced by a PostgreSQL BEFORE UPDATE trigger. `updated_at` is also maintained by the database. Every source insert/update/delete advances the parent application revision. Traffic-only views/download counters preserve the catalog revision and do not invalidate owner forms or countdowns. Legacy `shrankme_url` and `devupload_url` remain intact. SteamRIP continues to use `devupload_url` as its source page, not an upload-service URL.
 
 `site_delivery_sources` has primary key `(application_id, provider)`, an application FK, provider (`telegram`, `railway-s3`, `s3`), Telegram chat/message/username/file references, filename, byte size, MIME and creation/update timestamps. Telegram rows require a valid public username and positive message ID. Website references may have unknown chat ID/file metadata. Bot references come from a verified `get_chat` + `copy_message` result. No token, API file URL or arbitrary destination URL is stored in this table.
 
