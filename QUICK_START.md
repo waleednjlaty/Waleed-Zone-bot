@@ -78,7 +78,7 @@ python main.py
 لتشغيل البوت محلياً تحتاج **فقط** إلى:
 
 ```env
-BOT_TOKEN=من_BotFather
+BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>
 ```
 
 الباقي اختياري (اتركه كما هو في .env.example).

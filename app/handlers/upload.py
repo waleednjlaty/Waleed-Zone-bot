@@ -1,17 +1,21 @@
 """Owner uploads and attachments: Telegram copy → shared catalog → optional promo."""
 from __future__ import annotations
+
 import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
+
 from app.keyboards.user import cancel_keyboard
 from app.services.upload_service import build_upload_service
 from app.states import UploadStates
 from app.utils.constants import AdminCB, AppCB, MainMenuCB
 from app.utils.helpers import build_search_text, format_size, is_admin
+from app.utils.owner_guard import owner_gate
 from app.utils.text import escape_html
 from app.utils.website import website_app_url, website_download_url
 from config import get_settings
@@ -50,6 +54,8 @@ def _only_admin(call):
 @router.callback_query(AppCB.filter(F.action == "upload"))
 @router.callback_query(AdminCB.filter(F.action == "add_app"))
 async def on_upload_start(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     if not _only_admin(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -61,6 +67,8 @@ async def on_upload_start(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(AdminCB.filter(F.action == "attach_file"))
 async def on_attach_file(call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession) -> None:
+    if not await owner_gate(call):
+        return
     if not _only_admin(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -77,6 +85,8 @@ async def on_attach_file(call: CallbackQuery, callback_data: AdminCB, state: FSM
 
 @router.message(UploadStates.waiting_file)
 async def on_file(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    if not await owner_gate(message):
+        return
     if not message.from_user or not is_admin(message.from_user.id):
         await message.answer("⛔ صلاحية غير متاحة.")
         return
@@ -124,31 +134,43 @@ async def _collect(message, state, field, next_state, prompt, max_length):
 
 @router.message(UploadStates.waiting_name)
 async def on_name(message: Message,state: FSMContext):
+    if not await owner_gate(message):
+        return
     await _collect(message,state,"name",UploadStates.waiting_description,"أرسل وصف التطبيق:",255)
 
 
 @router.message(UploadStates.waiting_description)
 async def on_description(message: Message,state: FSMContext):
+    if not await owner_gate(message):
+        return
     await _collect(message,state,"description",UploadStates.waiting_version,"أرسل الإصدار:",1000)
 
 
 @router.message(UploadStates.waiting_version)
 async def on_version(message: Message,state: FSMContext):
+    if not await owner_gate(message):
+        return
     await _collect(message,state,"version",UploadStates.waiting_platform,"أرسل النظام (Android / Windows…):",50)
 
 
 @router.message(UploadStates.waiting_platform)
 async def on_platform(message: Message,state: FSMContext):
+    if not await owner_gate(message):
+        return
     await _collect(message,state,"platform",UploadStates.waiting_category,"أرسل التصنيف (تطبيقات / ألعاب موبايل / ألعاب كمبيوتر…):",50)
 
 
 @router.message(UploadStates.waiting_category)
 async def on_category(message: Message,state: FSMContext):
+    if not await owner_gate(message):
+        return
     await _collect(message,state,"category",UploadStates.waiting_icon,"أرسل صورة التطبيق أو /skip لتجاوزها:",100)
 
 
 @router.message(UploadStates.waiting_icon)
 async def on_icon(message: Message,state: FSMContext):
+    if not await owner_gate(message):
+        return
     photo=message.photo[-1].file_id if message.photo else None
     image_url=None
     if photo:
@@ -167,6 +189,8 @@ async def on_icon(message: Message,state: FSMContext):
 
 @router.callback_query(F.data.in_({"upl:save_draft","upl:save_publish"}), UploadStates.waiting_publish_choice)
 async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSession):
+    if not await owner_gate(call):
+        return
     if not _only_admin(call):
         await call.answer("⛔",show_alert=True)
         return

@@ -9,9 +9,11 @@ import re
 from collections.abc import Mapping
 from urllib.parse import parse_qs, urljoin, urlsplit, urlunsplit
 
-import httpx
 from bs4 import BeautifulSoup
 from curl_cffi import AsyncSession as CurlAsyncSession
+from curl_cffi import CurlOpt
+
+from integrations.public_http import fetch_public_bytes, public_addresses, public_url
 
 logger = logging.getLogger(__name__)
 
@@ -239,27 +241,27 @@ def _host_matches_bzzhr(host: str) -> bool:
 
 def _is_bzzhr_url(url: str) -> bool:
     try:
-        parsed = urlsplit(url)
-    except Exception:
+        public_url(url,set(BZZHR_MIRRORS) | {'www.'+host for host in BZZHR_MIRRORS})
+        return True
+    except ValueError:
         return False
-    return parsed.scheme in {"http", "https"} and _host_matches_bzzhr(parsed.hostname or "")
 
 
 def _is_steamrip_url(url: str) -> bool:
     try:
-        parsed = urlsplit(url)
-    except Exception:
+        public_url(url,{'steamrip.com','www.steamrip.com'})
+        return True
+    except ValueError:
         return False
-    host = (parsed.hostname or "").lower().removeprefix("www.")
-    return parsed.scheme in {"http", "https"} and host == "steamrip.com"
 
 
 def _safe_url_for_log(url: str) -> str:
     """لا تسجل query الموقّع حتى لا نسرّب token رابط التحميل."""
-    parsed = urlsplit(url)
-    if not parsed.scheme or not parsed.netloc:
-        return url
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+    try:
+        parsed = urlsplit(url)
+        return urlunsplit((parsed.scheme, parsed.hostname or '', parsed.path, "", ""))
+    except ValueError:
+        return '[INVALID_URL]'
 
 
 def _looks_like_direct_download(url: str) -> bool:
@@ -269,7 +271,9 @@ def _looks_like_direct_download(url: str) -> bool:
     except Exception:
         return False
 
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    try:
+        public_url(url)
+    except ValueError:
         return False
 
     parts = [part for part in parsed.path.split("/") if part]
@@ -304,10 +308,9 @@ def _identify_server(url: str, text: str) -> str:
 def _bzzhr_candidates(url: str) -> list[str]:
     """جرّب نفس file-id على المرايا الرسمية بدون افتراض id ثابت."""
     normalized = _normalize_url(url)
-    parsed = urlsplit(normalized)
-
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if not _is_bzzhr_url(normalized):
         return []
+    parsed = urlsplit(normalized)
 
     original_host = (parsed.hostname or "").lower()
     if not _host_matches_bzzhr(original_host):
@@ -390,19 +393,10 @@ async def fetch_game_data(page_url: str) -> dict:
     if not _is_steamrip_url(page_url):
         raise ValueError("الرابط يجب أن يكون من steamrip.com")
 
-    async with httpx.AsyncClient(
-        headers=BROWSER_HEADERS,
-        follow_redirects=True,
-        timeout=25.0,
-    ) as client:
-        response = await client.get(page_url)
-        response.raise_for_status()
-
-    final_page_url = str(response.url)
-    if not _is_steamrip_url(final_page_url):
-        raise RuntimeError("SteamRIP أعاد توجيهاً خارج steamrip.com")
-
-    soup = BeautifulSoup(response.text, "html.parser")
+    payload, _, final_page_url = await fetch_public_bytes(page_url,
+        allowed_hosts={'steamrip.com','www.steamrip.com'},headers=BROWSER_HEADERS)
+    page_text=payload.decode('utf-8','replace')
+    soup = BeautifulSoup(page_text, "html.parser")
 
     title_el = soup.find("h1", class_="entry-title") or soup.find("h1")
     title = title_el.get_text(strip=True) if title_el else "Game Title"
@@ -416,7 +410,7 @@ async def fetch_game_data(page_url: str) -> dict:
     size = "—"
     size_match = re.search(
         r"Size\s*:\s*([\d\.]+\s*(?:GB|MB))",
-        response.text,
+        page_text,
         re.IGNORECASE,
     )
     if size_match:
@@ -480,7 +474,11 @@ async def _resolve_candidate_fast(
     }
     proxy = _configured_proxy()
     if proxy:
-        session_kwargs["proxy"] = proxy
+        raise ValueError('UNVERIFIED_PROXY_NOT_SUPPORTED')
+    public_url(candidate_url,set(BZZHR_MIRRORS) | {'www.'+v for v in BZZHR_MIRRORS})
+    host=urlsplit(candidate_url).hostname
+    addresses=await asyncio.wait_for(asyncio.to_thread(public_addresses,host),5)
+    session_kwargs['curl_options']={CurlOpt.RESOLVE:[f'{host}:443:{addresses[0]}']}
 
     async with CurlAsyncSession(**session_kwargs) as session:
         page_response = await session.get(
@@ -513,6 +511,8 @@ async def _resolve_candidate_fast(
             page_url,
         )
         if not signed_endpoint:
+            return None
+        if urlsplit(signed_endpoint).hostname != host:
             return None
 
         hx_headers = {
@@ -679,11 +679,28 @@ def _resolve_candidates_with_browser_sync(
     if executable_path:
         session_kwargs["executable_path"] = executable_path
     if proxy:
-        session_kwargs["proxy"] = proxy
+        raise ValueError('UNVERIFIED_PROXY_NOT_SUPPORTED')
+    # Pin the finite browser provider set at launch, with all unknown DNS denied.
+    # This also covers redirects, images, scripts, iframes and browser fetch().
+    pins={}
+    for host in (*BZZHR_MIRRORS,*('www.'+v for v in BZZHR_MIRRORS),'challenges.cloudflare.com'):
+        pins[host]=public_addresses(host)[0]
+    session_kwargs['extra_flags']=['--disable-quic','--host-resolver-rules='+', '.join(
+        [f'MAP {host} {address}' for host,address in pins.items()]+['MAP * ~NOTFOUND']), '--proxy-server=direct://']
+    session_kwargs['additional_args']={'service_workers':'block'}
+    session_kwargs['dns_over_https']=False
 
     request_headers = {"Referer": referer} if referer else None
 
     with StealthySession(**session_kwargs) as session:
+        def guard(route):
+            try:
+                public_url(route.request.url,set(pins))
+            except ValueError:
+                route.abort()
+            else:
+                route.continue_()
+        session.context.route('**/*',guard)
         for candidate in candidates:
             logger.info(
                 "Trying BZZHR browser mirror: %s",

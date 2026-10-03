@@ -26,10 +26,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest pytest-asyncio
+          pip install -r requirements.txt pytest pytest-asyncio pip-audit ruff
 
       - name: Compile Python sources
         run: python -m compileall -q app config database integrations main.py
 
       - name: Run tests
         run: pytest -q
+
+      - name: Security helper lint
+        run: >-
+          ruff check app/utils/owner_guard.py app/utils/logging_config.py
+          app/services/upload_service.py database/database.py integrations/public_http.py
+          integrations/steamrip_metadata.py tests/test_phase8_security.py
+
+      - name: Production dependency review
+        run: pip-audit -r requirements.txt

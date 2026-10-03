@@ -34,8 +34,8 @@ npx railway init
 
 ```bash
 # في لوحة تحكم Railway
-railway variables set IMGBB_API_KEY=your_api_key
-railway variables set BOT_TOKEN=your_bot_token
+railway variables set IMGBB_API_KEY=<IMGBB_API_KEY_FROM_PROVIDER>
+railway variables set BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>
 ```
 
 أو عبر الـ Dashboard:

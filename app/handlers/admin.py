@@ -34,12 +34,11 @@ from app.services.stats_service import app_stats, global_stats
 from app.states import BroadcastStates, EditAppStates, GroupAdminStates
 from app.utils.constants import (
     AdminCB,
-    AppCB,
     BannedWordCB,
     MainMenuCB,
-    ReqCB,
 )
-from app.utils.helpers import is_admin, parse_int, paginate
+from app.utils.helpers import is_admin, paginate, parse_int
+from app.utils.owner_guard import owner_gate
 from app.utils.text import app_card, escape_html
 from app.utils.website import website_app_url
 from config import get_settings
@@ -73,6 +72,8 @@ def _guard(call: CallbackQuery) -> bool:
 # ---------------------------------------------------------------- لوحة عامة
 @router.callback_query(AdminCB.filter(F.action == "panel"))
 async def on_panel(call: CallbackQuery) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
@@ -85,6 +86,8 @@ async def on_panel(call: CallbackQuery) -> None:
 
 @router.callback_query(AdminCB.filter(F.action == "stats"))
 async def on_stats(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -103,6 +106,8 @@ async def on_stats(call: CallbackQuery, session: AsyncSession) -> None:
 async def on_requests_list(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -123,6 +128,8 @@ async def on_requests_list(
 async def on_apps_management(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -142,6 +149,8 @@ async def on_apps_management(
 async def on_app_manage(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -165,6 +174,8 @@ async def on_app_manage(
 async def on_app_link(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -189,6 +200,8 @@ async def on_app_link(
 async def on_app_stats(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -210,6 +223,8 @@ async def on_app_stats(
 async def on_delete_ask(
     call: CallbackQuery, callback_data: AdminCB
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -224,6 +239,8 @@ async def on_delete_ask(
 async def on_delete_yes(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -236,6 +253,8 @@ async def on_delete_yes(
 async def on_toggle_app(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -260,6 +279,8 @@ async def on_toggle_app(
 async def on_edit_app(
     call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -292,6 +313,8 @@ async def on_edit_app(
 async def on_edit_field(
     call: CallbackQuery, state: FSMContext
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -311,6 +334,8 @@ async def on_edit_field(
 async def on_edit_value(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         await message.answer("⛔ صلاحية غير متاحة.")
         return
@@ -357,6 +382,8 @@ async def on_edit_value(
 async def on_publish_select(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -374,6 +401,8 @@ async def on_publish_select(
 async def on_publish_app(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -389,6 +418,8 @@ async def on_publish_app(
 
 @router.callback_query(AdminCB.filter(F.action == "migrate_images"))
 async def on_migrate_images(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await owner_gate(call):
+        return
     """زر مخصص لترحيل صور التطبيقات من Telegram إلى ImgBB."""
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
@@ -429,6 +460,8 @@ async def on_migrate_images(call: CallbackQuery, session: AsyncSession) -> None:
 # ---------------------------------------------------------------- إدارة الجروب
 @router.callback_query(AdminCB.filter(F.action == "group"))
 async def on_group_menu(call: CallbackQuery) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -441,6 +474,8 @@ async def on_group_menu(call: CallbackQuery) -> None:
 
 @router.callback_query(AdminCB.filter(F.action == "group_help"))
 async def on_group_help(call: CallbackQuery) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     text = (
         "🔔 أوامر الإشراف داخل المجموعة (الرد على رسالة العضو):\n\n"
@@ -462,6 +497,8 @@ async def on_group_help(call: CallbackQuery) -> None:
 async def on_welcome_settings(
     call: CallbackQuery, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -477,6 +514,8 @@ async def on_welcome_settings(
 async def on_welcome_toggle(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     enabled = callback_data.action == "welcome_on"
     await repo.set_setting(session, "welcome_enabled", "1" if enabled else "0")
     await call.answer("✅ تم الحفظ")
@@ -488,6 +527,8 @@ async def on_welcome_toggle(
 
 @router.callback_query(AdminCB.filter(F.action == "welcome_edit"))
 async def on_welcome_edit(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     await state.set_state(GroupAdminStates.waiting_welcome_message)
     await call.message.answer(
@@ -503,6 +544,8 @@ async def on_welcome_edit(call: CallbackQuery, state: FSMContext) -> None:
 async def on_welcome_message(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         return
     await repo.set_setting(session, "welcome_message", message.text.strip())
@@ -514,6 +557,8 @@ async def on_welcome_message(
 async def on_protection(
     call: CallbackQuery, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -531,6 +576,8 @@ async def on_protection(
 async def on_spam_toggle(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     enabled = callback_data.action == "spam_on"
     await repo.set_setting(session, "anti_spam_enabled", "1" if enabled else "0")
     await call.answer("✅ تم الحفظ")
@@ -539,6 +586,8 @@ async def on_spam_toggle(
 
 @router.callback_query(AdminCB.filter(F.action == "warn_limit_edit"))
 async def on_warn_limit_edit(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     await state.set_state(GroupAdminStates.waiting_warn_limit)
     await call.message.answer("✏️ أرسل حد التحذيرات (رقم من 1 إلى 10):")
@@ -548,6 +597,8 @@ async def on_warn_limit_edit(call: CallbackQuery, state: FSMContext) -> None:
 async def on_warn_limit_value(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         return
     value = parse_int(message.text.strip(), 0)
@@ -563,6 +614,8 @@ async def on_warn_limit_value(
 async def on_warn_action_toggle(
     call: CallbackQuery, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     current = await repo.get_setting(session, "warn_action", "mute") or "mute"
     new_action = "ban" if current == "mute" else "mute"
     await repo.set_setting(session, "warn_action", new_action)
@@ -573,6 +626,8 @@ async def on_warn_action_toggle(
 # ---------------------------------------------------------------- الكلمات المحظورة
 @router.callback_query(AdminCB.filter(F.action == "banned_words"))
 async def on_banned_words(call: CallbackQuery, session: AsyncSession) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -586,6 +641,8 @@ async def on_banned_words(call: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(AdminCB.filter(F.action == "bw_add"))
 async def on_banned_word_add(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     await state.set_state(GroupAdminStates.waiting_banned_word)
     await call.message.answer(
@@ -600,6 +657,8 @@ async def on_banned_word_add(call: CallbackQuery, state: FSMContext) -> None:
 async def on_banned_word_value(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         return
     word = message.text.strip()
@@ -618,6 +677,8 @@ async def on_banned_word_value(
 async def on_banned_word_delete(
     call: CallbackQuery, callback_data: BannedWordCB, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -629,6 +690,8 @@ async def on_banned_word_delete(
 # ---------------------------------------------------------------- الإعدادات
 @router.callback_query(AdminCB.filter(F.action == "settings"))
 async def on_settings(call: CallbackQuery) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -640,6 +703,8 @@ async def on_settings(call: CallbackQuery) -> None:
 async def on_maintenance_toggle(
     call: CallbackQuery, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -656,6 +721,8 @@ async def on_maintenance_toggle(
 async def on_force_sub_toggle(
     call: CallbackQuery, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -672,6 +739,8 @@ async def on_force_sub_toggle(
 async def on_notif_global_toggle(
     call: CallbackQuery, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -687,6 +756,8 @@ async def on_notif_global_toggle(
 # ---------------------------------------------------------------- الإعلانات
 @router.callback_query(AdminCB.filter(F.action == "broadcast"))
 async def on_broadcast(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
@@ -704,6 +775,8 @@ async def on_broadcast(call: CallbackQuery, state: FSMContext) -> None:
 async def on_broadcast_text(
     message: Message, session: AsyncSession, state: FSMContext
 ) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         return
     await state.update_data(broadcast_text=message.text)
@@ -715,6 +788,8 @@ async def on_broadcast_text(
 async def on_broadcast_target(
     call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return

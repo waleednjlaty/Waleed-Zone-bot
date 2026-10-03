@@ -14,13 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.keyboards.user import cancel_keyboard
 from app.utils.catalog import PC_GAME_CATEGORY
 from app.utils.constants import (
-    AdminCB,
     DEFAULT_CATEGORIES,
-    MainMenuCB,
     REQUIRED_PLATFORMS,
+    AdminCB,
+    MainMenuCB,
 )
 from app.utils.helpers import build_search_text, escape_html, is_admin
-from app.utils.text import append_app_footer, download_link_block
+from app.utils.owner_guard import owner_gate
+from app.utils.text import download_link_block
 from config import get_settings
 from database import repositories as repo
 from integrations.imgbb import ImgBBUploader
@@ -425,6 +426,8 @@ async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> 
 
 @router.callback_query(F.data.startswith("add_custom_link:"))
 async def on_add_custom_link(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     if not is_admin(call.from_user.id):
         await call.answer("⛔ صلاحية غير متاحة. هذا الخيار للإدارة فقط.", show_alert=True)
         return
@@ -444,6 +447,8 @@ async def on_custom_link_received(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         return
 
@@ -468,6 +473,8 @@ async def on_custom_link_received(
 
 @router.callback_query(AdminCB.filter(F.action == "add_rip_game"))
 async def on_add_rip_game_btn(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     if not is_admin(call.from_user.id):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
@@ -483,6 +490,8 @@ async def on_add_rip_game_btn(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(SteamRipStates.waiting_game_url)
 async def on_steamrip_url_received(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         return
 
@@ -497,6 +506,8 @@ async def on_steamrip_url_received(message: Message, state: FSMContext) -> None:
 
 @router.message(Command("rip"))
 async def on_quick_publish_rip(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     if not is_admin(message.from_user.id):
         return
 
@@ -512,6 +523,8 @@ async def on_quick_publish_rip(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "rip:meta_manual")
 async def on_rip_manual_metadata(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     if not is_admin(call.from_user.id):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
@@ -531,6 +544,8 @@ async def on_rip_manual_metadata(call: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(F.data == "rip:meta_auto")
 async def on_rip_auto_metadata(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     if not is_admin(call.from_user.id):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
@@ -551,6 +566,8 @@ async def on_rip_auto_metadata(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(SteamRipStates.waiting_name)
 async def on_rip_name(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     value = (message.text or "").strip()
     if not value:
         await message.answer("❌ أرسل اسمًا صالحًا.")
@@ -563,6 +580,8 @@ async def on_rip_name(message: Message, state: FSMContext) -> None:
 
 @router.message(SteamRipStates.waiting_description)
 async def on_rip_description(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     value = (message.text or "").strip()
     if not value:
         await message.answer("❌ أرسل وصفًا صالحًا.")
@@ -575,6 +594,8 @@ async def on_rip_description(message: Message, state: FSMContext) -> None:
 
 @router.message(SteamRipStates.waiting_version)
 async def on_rip_version(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     value = (message.text or "").strip()
     if not value:
         await message.answer("❌ أرسل إصدارًا صالحًا.")
@@ -590,6 +611,8 @@ async def on_rip_version(message: Message, state: FSMContext) -> None:
 
 @router.message(SteamRipStates.waiting_platform)
 async def on_rip_platform_text(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     value = (message.text or "").strip()
     if not value:
         await message.answer("❌ أرسل اسم نظام صالحًا.")
@@ -600,6 +623,8 @@ async def on_rip_platform_text(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("rip:pf:"))
 async def on_rip_platform_choice(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     value = call.data.split(":", 2)[2]
     await call.answer()
     await state.update_data(platform=value)
@@ -608,6 +633,8 @@ async def on_rip_platform_choice(call: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(F.data == "rip:custom_platform")
 async def on_rip_custom_platform(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     await state.set_state(SteamRipStates.waiting_platform)
     await call.message.edit_text("✍️ اكتب اسم النظام:", reply_markup=_cancel_keyboard())
@@ -615,6 +642,8 @@ async def on_rip_custom_platform(call: CallbackQuery, state: FSMContext) -> None
 
 @router.message(SteamRipStates.waiting_category)
 async def on_rip_category_text(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     value = (message.text or "").strip()
     if not value:
         await message.answer("❌ أرسل اسم تصنيف صالحًا.")
@@ -625,6 +654,8 @@ async def on_rip_category_text(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("rip:cat:"))
 async def on_rip_category_choice(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     value = call.data.split(":", 2)[2]
     await call.answer()
     await state.update_data(category=value)
@@ -633,6 +664,8 @@ async def on_rip_category_choice(call: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(F.data == "rip:custom_category")
 async def on_rip_custom_category(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     await state.set_state(SteamRipStates.waiting_category)
     await call.message.edit_text("✍️ اكتب اسم التصنيف:", reply_markup=_cancel_keyboard())
@@ -640,6 +673,8 @@ async def on_rip_custom_category(call: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(F.data == "rip:img_site")
 async def on_rip_image_site(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     data = await state.get_data()
     if not data.get("source_image_url"):
         await call.answer("⚠️ لم يتم العثور على صورة في SteamRIP.", show_alert=True)
@@ -652,6 +687,8 @@ async def on_rip_image_site(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "rip:img_manual")
 async def on_rip_image_manual(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     await state.set_state(SteamRipStates.waiting_manual_image)
     await call.message.edit_text(
@@ -662,6 +699,8 @@ async def on_rip_image_manual(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "rip:img_none")
 async def on_rip_image_none(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     await call.answer()
     await state.update_data(image_mode="none", image_url=None, icon_file_id=None)
     await _ask_publish(call.message, state)
@@ -669,6 +708,8 @@ async def on_rip_image_none(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(SteamRipStates.waiting_manual_image)
 async def on_rip_manual_image(message: Message, state: FSMContext) -> None:
+    if not await owner_gate(message):
+        return
     if not message.photo:
         await message.answer("❌ أرسل صورة، وليس نصًا أو ملفًا آخر.")
         return
@@ -680,6 +721,8 @@ async def on_rip_manual_image(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.in_({"rip:pub_yes", "rip:pub_no"}))
 async def on_rip_publish_choice(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
     choice = "yes" if call.data.endswith("_yes") else "no"
     await call.answer()
     await state.update_data(publish_choice=choice)
@@ -688,6 +731,8 @@ async def on_rip_publish_choice(call: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(SteamRipStates.waiting_publish_choice)
 async def on_rip_publish_text(message: Message) -> None:
+    if not await owner_gate(message):
+        return
     await message.answer("استخدم أزرار نعم أو لا.")
 
 
@@ -697,6 +742,8 @@ async def on_rip_confirm(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
+    if not await owner_gate(call):
+        return
     if not is_admin(call.from_user.id):
         await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
@@ -755,7 +802,7 @@ async def on_rip_confirm(
             await repo.update_application(session, app)
 
         await session.commit()
-    except Exception as exc:
+    except Exception:
         logger.exception("RIP app creation/image migration failed")
         await session.rollback()
         await call.message.answer(

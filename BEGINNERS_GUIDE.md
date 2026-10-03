@@ -47,7 +47,7 @@ python --version
 
 **مثال التوكن**:
 ```
-8418114419:AAFChZ1SBfvhcuKKr1cBlD_E5lMZz_-Ubv4
+<BOT_TOKEN_FROM_BOTFATHER>
 ```
 
 احفظه بمكان آمن! ☝️
@@ -155,11 +155,11 @@ cp .env.example .env
 افتح `.env` بـ Notepad أو VS Code:
 
 ```env
-BOT_TOKEN=PASTE_HERE
+BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>
 
 # استبدل PASTE_HERE بالتوكن اللي حصلت عليه من BotFather
 # مثال:
-BOT_TOKEN=8418114419:AAFChZ1SBfvhcuKKr1cBlD_E5lMZz_-Ubv4
+BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>
 
 # الباقي لا تعدّله
 ```

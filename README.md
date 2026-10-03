@@ -76,7 +76,7 @@ Copy-Item .env.example .env
 Open `.env` and provide at least:
 
 ```env
-BOT_TOKEN=your_bot_token
+BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>
 ADMIN_IDS=123456789
 DATABASE_URL=sqlite+aiosqlite:///data/bot.db
 ```

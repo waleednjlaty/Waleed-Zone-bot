@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         env_file=str(BASE_DIR / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     @model_validator(mode="after")
@@ -39,7 +40,7 @@ class Settings(BaseSettings):
         return self
 
     # --- أساسي ---
-    BOT_TOKEN: str
+    BOT_TOKEN: str = Field(repr=False)
     ADMIN_IDS: str = ""
 
     # --- القناة والمجموعة ---
@@ -53,10 +54,10 @@ class Settings(BaseSettings):
     FILES_CHANNEL_USERNAME: str | None = None
 
     # --- ImgBB (رفع الصور) ---
-    IMGBB_API_KEY: str | None = None
+    IMGBB_API_KEY: str | None = Field(default=None,repr=False)
 
     # --- قاعدة البيانات ---
-    DATABASE_URL: str = DEFAULT_DB_URL
+    DATABASE_URL: str = Field(default=DEFAULT_DB_URL,repr=False)
 
     # --- سلوك عام ---
     MAX_UPLOAD_BYTES: int = 2 * 1024 * 1024 * 1024  # 2 GB
@@ -65,7 +66,7 @@ class Settings(BaseSettings):
 
     WEBSITE_BASE_URL: str = "https://waleed-zone.up.railway.app"
     WEBSITE_STATS_URL: str = "https://waleed-zone.up.railway.app/api/stats"
-    WEBSITE_STATS_TOKEN: str | None = None
+    WEBSITE_STATS_TOKEN: str | None = Field(default=None,repr=False)
 
     @property
     def admin_ids(self) -> list[int]:
