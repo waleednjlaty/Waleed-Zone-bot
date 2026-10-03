@@ -46,7 +46,7 @@ def test_invalid_channel(value):
 
 
 def incoming(user=111,username='main_channel'):
-    bot=SimpleNamespace(get_chat=AsyncMock(return_value=SimpleNamespace(id=-1001,type='channel',username=username,has_protected_content=False)),copy_message=AsyncMock(return_value=SimpleNamespace(message_id=42)),download=AsyncMock(),get_file=AsyncMock())
+    bot=SimpleNamespace(get_me=AsyncMock(return_value=SimpleNamespace(id=123456)),get_chat_member=AsyncMock(return_value=SimpleNamespace(status='administrator',can_post_messages=True)),get_chat=AsyncMock(return_value=SimpleNamespace(id=-1001,type='channel',username=username,has_protected_content=False)),copy_message=AsyncMock(return_value=SimpleNamespace(message_id=42)),download=AsyncMock(),get_file=AsyncMock())
     return SimpleNamespace(from_user=SimpleNamespace(id=user),bot=bot,chat=SimpleNamespace(id=111),message_id=7,document=SimpleNamespace(file_id='FILE_TEST',file_name='qa.apk',file_size=24,mime_type='application/vnd.android.package-archive'),answer=AsyncMock())
 
 

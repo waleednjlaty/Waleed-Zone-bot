@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -13,9 +14,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from config import get_settings
 from database.models import Base
-from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +28,24 @@ class Database:
     """
 
     def __init__(self, url: str) -> None:
+        connect_args = (
+            {
+                "server_settings": {
+                    "statement_timeout": "5000",
+                    "lock_timeout": "2000",
+                    "idle_in_transaction_session_timeout": "120000",
+                },
+                "timeout": 10,
+                "command_timeout": 10,
+            }
+            if url.startswith("postgresql+asyncpg:")
+            else {}
+        )
         self.engine: AsyncEngine = create_async_engine(
             url,
             echo=False,
             pool_pre_ping=True,
+            connect_args=connect_args,
         )
         self.session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
             bind=self.engine,

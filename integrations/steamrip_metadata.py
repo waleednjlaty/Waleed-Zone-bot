@@ -10,10 +10,11 @@ from __future__ import annotations
 import logging
 import re
 
-import httpx
 from bs4 import BeautifulSoup
 
-from .steamrip_extractor import BROWSER_HEADERS, fetch_game_data as _fetch_game_data
+from .public_http import fetch_public_bytes
+from .steamrip_extractor import BROWSER_HEADERS
+from .steamrip_extractor import fetch_game_data as _fetch_game_data
 
 logger = logging.getLogger(__name__)
 
@@ -95,22 +96,20 @@ async def fetch_game_data(page_url: str) -> dict:
 
     final_url = str(data.get("page_url") or page_url)
     try:
-        async with httpx.AsyncClient(
+        body, _, _ = await fetch_public_bytes(
+            final_url,
+            allowed_hosts={"steamrip.com", "www.steamrip.com"},
             headers=BROWSER_HEADERS,
-            follow_redirects=True,
-            timeout=25.0,
-        ) as client:
-            response = await client.get(final_url)
-            response.raise_for_status()
-
-        size = extract_game_size(response.text)
+            timeout=25,
+        )
+        size = extract_game_size(body.decode("utf-8", errors="replace"))
         if size:
             data["size"] = size
             logger.info("SteamRIP game size found: %s", size)
         else:
-            logger.warning("SteamRIP game size was not found for %s", final_url)
+            logger.warning("SteamRIP game size was not found")
     except Exception as exc:
         # Size is useful metadata but should never abort the whole /rip flow.
-        logger.warning("SteamRIP size lookup failed for %s: %s", final_url, exc)
+        logger.warning("SteamRIP size lookup failed: %s", type(exc).__name__)
 
     return data

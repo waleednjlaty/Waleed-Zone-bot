@@ -12,6 +12,9 @@ from urllib.parse import urlsplit
 import aiohttp
 from aiogram import Bot
 
+from app.utils.logging_config import redact
+from integrations.public_http import fetch_public_bytes, public_url
+
 logger = logging.getLogger(__name__)
 
 _IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload"
@@ -89,7 +92,8 @@ class ImgBBUploader:
 
     def _remember_error(self, code: int | None, message: str) -> None:
         self.last_error_code = code
-        self.last_error_message = message
+        # Provider exceptions may echo a credential-bearing request URL.
+        self.last_error_message = redact(message)[:300]
 
     async def _upload_form(
         self,
@@ -146,7 +150,7 @@ class ImgBBUploader:
                     params=params,
                     data=data,
                     proxy=proxy,
-                    allow_redirects=True,
+                    allow_redirects=False,
                 ) as resp:
                     try:
                         result = await resp.json(content_type=None)
@@ -250,8 +254,10 @@ class ImgBBUploader:
         """
         self._reset_error()
 
-        if not image_url.startswith(("http://", "https://")):
-            self._remember_error(None, f"Invalid remote image URL: {image_url}")
+        try:
+            public_url(image_url)
+        except ValueError:
+            self._remember_error(None, "Invalid remote image URL")
             logger.warning(self.last_error_message)
             return ""
 
@@ -268,48 +274,10 @@ class ImgBBUploader:
         if referer:
             headers["Referer"] = referer
 
-        timeout = aiohttp.ClientTimeout(total=45)
         try:
-            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-                async with session.get(image_url, allow_redirects=True) as resp:
-                    if resp.status != 200:
-                        self._remember_error(resp.status, f"Remote image returned HTTP {resp.status}")
-                        logger.warning(
-                            "Remote image returned HTTP %s for %s",
-                            resp.status,
-                            image_url,
-                        )
-                        return ""
-
-                    content_type = (resp.headers.get("Content-Type") or "").split(";", 1)[0]
-                    if not content_type.startswith("image/"):
-                        self._remember_error(
-                            None,
-                            f"Remote URL did not return an image ({content_type or 'unknown'})",
-                        )
-                        logger.warning(
-                            "Remote URL did not return an image (%s): %s",
-                            content_type or "unknown",
-                            image_url,
-                        )
-                        return ""
-
-                    content_length = resp.headers.get("Content-Length")
-                    if content_length:
-                        try:
-                            if int(content_length) > _MAX_IMAGE_BYTES:
-                                self._remember_error(None, "Remote image is too large")
-                                logger.warning("Remote image is too large: %s", image_url)
-                                return ""
-                        except ValueError:
-                            pass
-
-                    payload = await resp.read()
-                    return await self._upload_bytes(
-                        payload,
-                        name=name,
-                        content_type=content_type,
-                    )
+            payload, content_type, _ = await fetch_public_bytes(image_url,headers=headers,
+                max_bytes=_MAX_IMAGE_BYTES,timeout=45,image=True)
+            return await self._upload_bytes(payload,name=name,content_type=content_type)
         except Exception as exc:
             self._remember_error(None, str(exc))
             logger.exception("Remote image fetch failed: %s", image_url)
