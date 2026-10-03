@@ -25,9 +25,10 @@ def test_download_url_stable():
 def test_files_channel_safe_fallback():
     assert files_channel(settings())==(-1001,'main_channel')
     assert files_channel(settings(fid=-1002,fname='@FILES_channel'))==(-1002,'files_channel')
+    assert files_channel(settings(fname='files_channel'))==(None,'files_channel')
 
 
-@pytest.mark.parametrize('s',[settings(fid=-1002),settings(fname='files_channel'),settings(fid=1,fname='files_channel'),settings(fid=-1002,fname='bad/url')])
+@pytest.mark.parametrize('s',[settings(fid=-1002),settings(fid=1,fname='files_channel'),settings(fid=-1002,fname='bad/url')])
 def test_files_channel_partial_or_invalid_rejected(s):
     with pytest.raises(ValueError): files_channel(s)
 
@@ -55,6 +56,15 @@ async def test_copy_uses_only_telegram_message_api(monkeypatch):
     assert metadata==source()
     message.bot.copy_message.assert_awaited_once_with(chat_id=-1001,from_chat_id=111,message_id=7,caption='',disable_notification=True)
     message.bot.download.assert_not_called();message.bot.get_file.assert_not_called()
+
+
+async def test_copy_resolves_files_channel_id_from_username(monkeypatch):
+    monkeypatch.setattr('app.services.upload_service.get_settings',lambda:settings(fname='main_channel'))
+    message=incoming()
+    metadata=await UploadService().copy(message)
+    message.bot.get_chat.assert_awaited_once_with('@main_channel')
+    assert metadata['telegram_chat_id']==-1001
+    message.bot.copy_message.assert_awaited_once_with(chat_id=-1001,from_chat_id=111,message_id=7,caption='',disable_notification=True)
 
 
 async def test_non_admin_upload_denied(monkeypatch):
