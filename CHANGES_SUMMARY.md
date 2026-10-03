@@ -88,10 +88,10 @@ Docker Start
 
 ```env
 # المطلوب الأساسي:
-BOT_TOKEN=xxx         ← رمز البوت
+BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>         ← رمز البوت
 
 # اختياري لكن مهم للترحيل:
-IMGBB_API_KEY=xxx     ← مفتاح ImgBB
+IMGBB_API_KEY=<IMGBB_API_KEY_FROM_PROVIDER>     ← مفتاح ImgBB
 
 # قاعدة البيانات:
 DATABASE_URL=xxx      ← رابط الـ DB (SQLite أو PostgreSQL)

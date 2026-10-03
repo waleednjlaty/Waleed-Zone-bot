@@ -99,14 +99,14 @@ cp .env.example .env
 
 ```env
 # ✅ المهم جداً
-BOT_TOKEN=8418114419:AAFChZ1SBfvhcuKKr1cBlD_E5lMZz_-Ubv4
+BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>
 ADMIN_IDS=7215167792
 
 # ✅ قاعدة البيانات (استخدم SQLite للتطوير المحلي)
 DATABASE_URL=sqlite+aiosqlite:///bot.db
 
 # اختياري - للترحيل
-IMGBB_API_KEY=a0a3a3988c0bb1674a8247aa03dcb0c9
+IMGBB_API_KEY=<IMGBB_API_KEY_FROM_PROVIDER>
 
 # واختياري - إذا أردت الرفع والتقصير
 DEVUPLOAD_API_KEY=xxx

@@ -26,6 +26,8 @@ The website retains server 20-second enforcement and exact validated Telegram na
 
 Sensitive: BOT_TOKEN, DATABASE_URL, IMGBB_API_KEY, WEBSITE_STATS_TOKEN, credential-bearing BZZHR_PROXY_URL/IMGBB_PROXY_URL. Authority: ADMIN_IDS. Channel config: FILES_CHANNEL_ID/USERNAME, fallback CHANNEL_ID/USERNAME; group config GROUP_ID/USERNAME. Public service endpoints: WEBSITE_BASE_URL/WEBSITE_STATS_URL. Limits/tooling: MAX_UPLOAD_BYTES, HTTP_MAX_RETRIES, DOWNLOAD_DIR, SCRAPLING_EXECUTABLE_PATH, script PYTHONIOENCODING/PYTHONUTF8. No deployed values were inspected or printed; no website BOT_TOKEN is introduced. Application/source IDs are private metadata except necessary public catalog IDs and owner source displays.
 
+Production-shaped Telegram token examples in `BEGINNERS_GUIDE.md` and `LOCAL_DEVELOPMENT.md`, and ImgBB key examples in guides, were replaced with opaque provider placeholders; a regression assertion scans guides for both credential formats. Their validity was not tested. Removal does not erase Git history; if any example was ever a real credential, revoke/rotate it manually as exposed. No history rewrite or token revocation was performed.
+
 [SECRET_ROTATION_RUNBOOK.md](SECRET_ROTATION_RUNBOOK.md) specifies website signing key, shared stats bearer, staged shared PostgreSQL credentials, BotFather/ImgBB/proxy tokens, coordinated restarts, verification/rollback and session/grant consequences. Exposed historical secrets need manual rotation. No dual-signing complexity is added for the 200-second total grant TTL. No new required variable; review any nonempty BZZHR proxy before a later authorized release.
 
 ## Evidence / accepted limits

@@ -324,10 +324,18 @@ def test_config_repr_and_validation_errors_hide_credentials():
 
 
 def test_schema_startup_contains_only_verification_for_postgresql():
+    import re
+
     source = Path("database/database.py").read_text()
     assert "SELECT revision FROM applications LIMIT 0" in source
     assert "SELECT application_id FROM site_delivery_sources LIMIT 0" in source
     assert "run_sync(Base.metadata.create_all)" in source  # SQLite test/local-only branch
+    # Historical guides had token-shaped examples. Keep samples opaque, never usable-looking.
+    token = re.compile(r"(?<![0-9])[0-9]{8,12}:[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])")
+    image_key = re.compile(r"IMGBB_API_KEY[ \t]*=[ \t]*[\x22\x27]?[a-fA-F0-9]{32}\b")
+    for guide in [*Path('.').glob('*.md'), *Path('docs').rglob('*.md')]:
+        assert not token.search(guide.read_text()), f"Token-shaped content in {guide.name}"
+        assert not image_key.search(guide.read_text()), f"Key-shaped content in {guide.name}"
 
 
 async def test_steamrip_size_fallback_rejects_redirect_before_contact(monkeypatch):

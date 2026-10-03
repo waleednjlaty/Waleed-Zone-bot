@@ -49,7 +49,7 @@ API Key: a0a3a3988c0bb1674a8247aa03dcb0c9
 انسخ المفتاح إلى ملف `.env`:
 
 ```env
-IMGBB_API_KEY=a0a3a3988c0bb1674a8247aa03dcb0c9
+IMGBB_API_KEY=<IMGBB_API_KEY_FROM_PROVIDER>
 ```
 
 ### الخيارات المتقدمة 🚀

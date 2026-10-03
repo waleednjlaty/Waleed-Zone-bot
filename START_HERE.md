@@ -25,7 +25,7 @@ copy .env.example .env
 
 # 2. أضف بيانات الاتصال (اختياري لـ SQLite)
 # افتح .env وأضف:
-# BOT_TOKEN=اسأل BotFather
+# BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER> BotFather
 # ADMIN_IDS=معرفك على تيليجرام
 
 # 3. أنشئ بيئة افتراضية
@@ -82,9 +82,9 @@ python main.py
 ### ملفات البيانات المطلوبة
 
 ```env
-BOT_TOKEN=من_BotFather
+BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER>
 ADMIN_IDS=معرفك_على_تيليجرام
-IMGBB_API_KEY=من_imgbb.com/api
+IMGBB_API_KEY=<IMGBB_API_KEY_FROM_PROVIDER>
 DATABASE_URL=sqlite+aiosqlite:///bot.db (للتطوير المحلي)
 ```
 
@@ -130,7 +130,7 @@ cp .env.example .env         # Linux/Mac
 
 # 5. تعديل .env (أضف البيانات المطلوبة)
 # افتح .env بـ أي محرر نصوص
-# BOT_TOKEN=... (اسأل BotFather)
+# BOT_TOKEN=<BOT_TOKEN_FROM_BOTFATHER> (اسأل BotFather)
 # ADMIN_IDS=... (اكتب معرفك)
 
 # 6. تثبيت الحزم (بطيء قليلاً)
