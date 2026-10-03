@@ -26,11 +26,10 @@ CREATE TABLE IF NOT EXISTS site_delivery_sources (
 CREATE OR REPLACE FUNCTION wz_catalog_revision() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
   -- Traffic counters must not invalidate a countdown or an owner's open form.
-  -- Explicit revision/timestamp updates (including source changes) still advance.
+  -- Explicit revision updates (including source changes) still advance.
   IF (to_jsonb(NEW) - ARRAY['views','downloads','revision','updated_at']) IS DISTINCT FROM
      (to_jsonb(OLD) - ARRAY['views','downloads','revision','updated_at'])
-     OR NEW.revision IS DISTINCT FROM OLD.revision
-     OR NEW.updated_at IS DISTINCT FROM OLD.updated_at THEN
+     OR NEW.revision IS DISTINCT FROM OLD.revision THEN
     NEW.revision := OLD.revision + 1;
     NEW.updated_at := clock_timestamp();
   ELSE
@@ -45,7 +44,7 @@ CREATE OR REPLACE FUNCTION wz_delivery_revision() RETURNS TRIGGER LANGUAGE plpgs
 BEGIN
   -- Both clients lock the application before changing a source. Direct metadata
   -- writes also invalidate outstanding owner revisions and download tokens.
-  UPDATE applications SET updated_at=clock_timestamp() WHERE id=COALESCE(NEW.application_id,OLD.application_id);
+  UPDATE applications SET revision=revision+1 WHERE id=COALESCE(NEW.application_id,OLD.application_id);
   RETURN COALESCE(NEW,OLD);
 END $$;
 CREATE OR REPLACE TRIGGER wz_delivery_revision AFTER INSERT OR UPDATE OR DELETE ON site_delivery_sources
