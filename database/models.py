@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    CheckConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -78,6 +79,25 @@ class Application(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+    revision: Mapped[int] = mapped_column(BigInteger, default=1, nullable=False)
+    __mapper_args__ = {"version_id_col": revision}
+
+
+class DeliverySource(Base):
+    __tablename__ = "site_delivery_sources"
+    application_id: Mapped[int] = mapped_column(Integer, ForeignKey("applications.id"), primary_key=True)
+    provider: Mapped[str] = mapped_column(Text, primary_key=True)
+    telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    telegram_message_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    telegram_channel_username: Mapped[str | None] = mapped_column(Text, default=None)
+    telegram_file_id: Mapped[str | None] = mapped_column(Text, default=None)
+    filename: Mapped[str | None] = mapped_column(Text, default=None)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    mime_type: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    __table_args__ = (CheckConstraint("provider IN ('telegram','railway-s3','s3')"),)
 
 
 class Download(Base):

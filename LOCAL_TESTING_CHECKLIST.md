@@ -1,3 +1,5 @@
+> Current upload/delivery instructions: [Bot–Website integration](docs/BOT_WEBSITE_INTEGRATION.md). DevUploads/ShrinkMe upload steps below are historical and must not be used for new files. No paid infrastructure is required.
+
 ## 🧪 قائمة اختبار البوت المحلي
 
 اتبع هذه الخطوات لاختبار كل حاجة في البوت بعد تشغيله محلياً.

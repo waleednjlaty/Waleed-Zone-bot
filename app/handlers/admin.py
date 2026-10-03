@@ -60,8 +60,7 @@ FIELD_LABELS = {
     "platform": "📱 النظام",
     "category": "🗂 التصنيف",
     "developer": "👨‍💻 المطور",
-    "devupload_url": "🔗 رابط Dev Upload",
-    "shrankme_url": "🔗 رابط ShrinkMe",
+    "image_url": "🖼 رابط الصورة",
 }
 
 
@@ -128,7 +127,7 @@ async def on_apps_management(
         await call.answer("⛔", show_alert=True)
         return
     await call.answer()
-    apps = await repo.list_applications(session, active_only=False, limit=200)
+    apps = await repo.list_applications(session, active_only=False, public_only=False, limit=200)
     page, total_pages = paginate(len(apps), callback_data.page, PER_PAGE)
     chunk = apps[page * PER_PAGE : (page + 1) * PER_PAGE]
     text = "📱 إدارة التطبيقات\n────────────\n"
@@ -174,11 +173,10 @@ async def on_app_link(
     if app is None:
         await call.answer("التطبيق غير موجود.", show_alert=True)
         return
-    text = (
-        f"📱 {escape_html(app.name)}\n"
-        f"🔗 Dev Upload: {escape_html(app.devupload_url or '—')}\n"
-        f"🔗 ShrinkMe: {escape_html(app.shrankme_url or '—')}"
-    )
+    from app.utils.website import website_download_url
+    text = f"📱 {escape_html(app.name)}\n🌐 {escape_html(website_download_url(app.id) or '')}"
+    if app.devupload_url or app.shrankme_url:
+        text += "\nمصدر legacy محفوظ لهذا التطبيق."
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🔙 رجوع", callback_data=AdminCB(action="app_manage", app_id=app.id, page=callback_data.page).pack())]
@@ -229,8 +227,8 @@ async def on_delete_yes(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
-    await repo.delete_application(session, callback_data.app_id)
-    await call.answer("🗑 تم حذف التطبيق")
+    await repo.archive_application(session, callback_data.app_id)
+    await call.answer("🗑 تمت أرشفة التطبيق")
     await on_apps_management(call, callback_data, session)
 
 
@@ -246,12 +244,13 @@ async def on_toggle_app(
     if app is None:
         await call.answer("التطبيق غير موجود.", show_alert=True)
         return
-    await repo.set_application_active(session, app.id, not app.active)
+    new_active = not app.active
+    await repo.set_application_active(session, app.id, new_active)
     await call.message.edit_text(
         f"{(await repo.get_application(session, app.id)).name} → "
-        f"{'✅ مفعّل' if not app.active else '🚫 معطّل'}",
+        f"{'✅ مفعّل' if new_active else '🚫 معطّل'}",
         reply_markup=app_manage_keyboard(
-            app.id, not app.active, callback_data.page
+            app.id, new_active, callback_data.page
         ),
     )
 
@@ -259,14 +258,18 @@ async def on_toggle_app(
 # ---------------------------------------------------------------- تعديل تطبيق
 @router.callback_query(AdminCB.filter(F.action == "edit_app"))
 async def on_edit_app(
-    call: CallbackQuery, callback_data: AdminCB, state: FSMContext
+    call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession
 ) -> None:
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
     await call.answer()
+    app = await repo.get_application(session, callback_data.app_id)
+    if not app:
+        await call.message.answer("التطبيق غير موجود.")
+        return
     await state.set_state(EditAppStates.choosing_field)
-    await state.update_data(app_id=callback_data.app_id, page=callback_data.page)
+    await state.update_data(app_id=app.id, page=callback_data.page, expected_revision=app.revision)
 
     rows: list[list[InlineKeyboardButton]] = []
     for key, label in FIELD_LABELS.items():
@@ -318,7 +321,25 @@ async def on_edit_value(
         await state.clear()
         return
     field = data.get("field")
+    if field not in FIELD_LABELS or field in {"devupload_url", "shrankme_url"} or not message.text:
+        await message.answer("❌ الحقل غير مسموح. اربط ملف Telegram بدل رابط خارجي جديد.")
+        return
+    if app.revision != data.get("expected_revision"):
+        await state.clear()
+        await message.answer("⚠️ تعارض في التعديل. افتح التطبيق مجددًا لقراءة النسخة الحالية.")
+        return
     value = message.text.strip()
+    from unicodedata import category as unicode_category
+    limits = {"name":255,"description":1000,"version":50,"size":50,"platform":50,"category":100,"developer":255,"image_url":500}
+    if not value or len(value) > limits[field] or any(unicode_category(c) in {"Cc","Cf"} and not (field == "description" and c in "\n\r\t") for c in value):
+        await message.answer("❌ قيمة غير صالحة.")
+        return
+    if field == "image_url":
+        from urllib.parse import urlsplit
+        parsed = urlsplit(value)
+        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.hostname == "api.telegram.org":
+            await message.answer("❌ رابط الصورة غير صالح.")
+            return
     setattr(app, field, value)
     if field in ("name", "category", "platform", "description"):
         from app.utils.helpers import build_search_text
@@ -340,7 +361,7 @@ async def on_publish_select(
         await call.answer("⛔", show_alert=True)
         return
     await call.answer()
-    apps = await repo.list_applications(session, active_only=True, limit=100)
+    apps = await repo.list_applications(session, active_only=True, public_only=False, limit=100)
     page, total_pages = paginate(len(apps), callback_data.page, PER_PAGE)
     chunk = apps[page * PER_PAGE : (page + 1) * PER_PAGE]
     await call.message.edit_text(

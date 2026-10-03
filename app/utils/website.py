@@ -1,7 +1,7 @@
 """روابط التكامل مع موقع Waleed Zone.
 
-نبقي الربط بسيطًا ورخيصًا: البوت يملك كتالوج التطبيقات، والموقع يقرأ
-نفس جدول applications. هذه الوحدة تبني روابط عامة فقط ولا تحمل أي سر.
+البوت والموقع يقرآن ويعدلان نفس جدول applications.
+هذه الوحدة تبني روابط عامة ثابتة فقط ولا تحمل أي سر.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ def website_app_url(app_id: int, base_url: str | None = None) -> str | None:
     Invalid configuration fails closed and returns None so publishing to Telegram
     never depends on the website being configured correctly.
     """
-    if not isinstance(app_id, int) or isinstance(app_id, bool) or app_id <= 0:
+    if not isinstance(app_id, int) or isinstance(app_id, bool) or not 0 < app_id <= 2147483647:
         return None
 
     raw = (base_url if base_url is not None else get_settings().WEBSITE_BASE_URL).strip()
@@ -26,10 +26,13 @@ def website_app_url(app_id: int, base_url: str | None = None) -> str | None:
 
     try:
         parsed = urlsplit(raw)
+        port = parsed.port
     except ValueError:
         return None
 
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if parsed.scheme != "https" or not parsed.netloc:
+        return None
+    if parsed.path not in {"", "/"} or port not in {None, 443}:
         return None
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         return None
@@ -37,3 +40,8 @@ def website_app_url(app_id: int, base_url: str | None = None) -> str | None:
     clean_path = parsed.path.rstrip("/")
     base = urlunsplit((parsed.scheme, parsed.netloc, clean_path, "", "")).rstrip("/")
     return f"{base}/app/{app_id}"
+
+
+def website_download_url(app_id: int, base_url: str | None = None) -> str | None:
+    url = website_app_url(app_id, base_url)
+    return url.replace("/app/", "/download/") if url else None

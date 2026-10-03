@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
 
 from config import get_settings
 from database.models import Base
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,12 @@ class Database:
 
     async def init_models(self) -> None:
         async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+            if self.engine.dialect.name == "sqlite":
+                await conn.run_sync(Base.metadata.create_all)
+            else:
+                # Production schema is operator-managed. Never run migrations on startup.
+                await conn.execute(text("SELECT revision FROM applications LIMIT 0"))
+                await conn.execute(text("SELECT application_id FROM site_delivery_sources LIMIT 0"))
         logger.info("Database schema ready.")
 
     async def close(self) -> None:

@@ -2,15 +2,17 @@
 
 [العربية](README_AR.md) · [Quick start](QUICK_START.md) · [Documentation](DOCUMENTATION_INDEX.md)
 
-A production-oriented Telegram bot for publishing and managing apps and games in the Waleed Zone community. It provides a searchable catalog for users, an admin workflow for uploads and publishing, request management, favorites, group moderation, and optional external storage/link integrations.
+A production-oriented Telegram bot for publishing and managing apps and games in the Waleed Zone community. It provides a searchable catalog for users, an admin workflow for uploads and publishing, request management, favorites, group moderation, and Telegram-backed file delivery through the shared website catalog.
+
+See the current [shared catalog and Telegram delivery contract](docs/BOT_WEBSITE_INTEGRATION.md) before setup.
 
 ## Features
 
 - Browse, search, and save apps
 - Submit and manage app requests
-- Admin panel for creating, editing, deleting, and publishing entries
-- Telegram file download and external upload workflow
-- Optional DevUploads, ShrinkMe, and ImgBB integrations
+- Admin panel for creating, editing, archiving, and publishing entries
+- Telegram-side file copy without downloading APK bytes to the server
+- Shared catalog + Telegram Files Channel; optional ImgBB cover photos
 - SteamRIP game-link extraction
 - Welcome messages, anti-flood controls, blocked-word filters, warnings, mute, and ban tools
 - SQLite for local development and PostgreSQL support for deployment
@@ -98,8 +100,8 @@ Then open the bot in Telegram and send `/start`.
 | `DATABASE_URL` | Yes | SQLAlchemy database URL |
 | `CHANNEL_ID` / `CHANNEL_USERNAME` | For publishing | Target Telegram channel |
 | `GROUP_ID` / `GROUP_USERNAME` | For moderation | Community group |
-| `DEVUPLOAD_API_KEY` | Optional | Upload files to DevUploads |
-| `SHRANKME_API_KEY` | Optional | Shorten published download links |
+| `FILES_CHANNEL_ID` | Paired | Public Telegram files channel numeric ID |
+| `FILES_CHANNEL_USERNAME` | Paired | Public Telegram files channel username |
 | `IMGBB_API_KEY` | Optional | Host or migrate images |
 | `MAX_UPLOAD_BYTES` | Optional | Maximum accepted upload size |
 | `DOWNLOAD_DIR` | Optional | Temporary upload directory |
@@ -142,7 +144,7 @@ ruff check .
 │   └── utils/          # Text, constants, logging, and helpers
 ├── config/             # Environment-backed settings
 ├── database/           # Models, sessions, and repositories
-├── integrations/       # DevUploads, ImgBB, ShrinkMe, SteamRIP, Telegram
+├── integrations/       # Telegram, ImgBB, SteamRIP (deprecated upload modules retained offline)
 ├── scripts/            # Maintenance and migration scripts
 ├── tests/              # Automated tests
 ├── deploy/             # Deployment configuration

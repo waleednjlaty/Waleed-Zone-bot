@@ -12,7 +12,7 @@ import os  # 👈 تمت إضافة هذا السطر هنا
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.types import BotCommand  # تم نقله للأعلى لترتيب الاستدعاءات بشكل نظيف
 
 from app.handlers import register_all_routers
@@ -58,7 +58,7 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     await set_default_commands(bot)
-    dp = Dispatcher(storage=MemoryStorage())
+    dp = Dispatcher(storage=MemoryStorage(), events_isolation=SimpleEventIsolation())
 
     # ترتيب الوسطاء: الخارجي أولًا (قاعدة البيانات ثم الوصول ثم الفيض)
     dp.message.middleware(DbSessionMiddleware())
