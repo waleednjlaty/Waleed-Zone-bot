@@ -215,7 +215,7 @@ async def on_delete_ask(
         return
     await call.answer()
     await call.message.edit_text(
-        "⚠️ هل أنت متأكد من حذف هذا التطبيق نهائيًا؟",
+        "⚠️ هل تريد أرشفة التطبيق وإخفاءه من الكتالوج العام؟ ستبقى بياناته محفوظة.",
         reply_markup=delete_confirm_keyboard(callback_data.app_id, callback_data.page),
     )
 
