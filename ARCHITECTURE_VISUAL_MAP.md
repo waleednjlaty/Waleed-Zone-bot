@@ -1,3 +1,5 @@
+> Current upload/delivery instructions: [Bot–Website integration](docs/BOT_WEBSITE_INTEGRATION.md). DevUploads/ShrinkMe upload steps below are historical and must not be used for new files. No paid infrastructure is required.
+
 ## 🎯 خريطة البوت البصرية الشاملة
 
 هذا الملف يحتوي على خرائط بصرية توضح كيف يعمل البوت من الألف إلى الياء.

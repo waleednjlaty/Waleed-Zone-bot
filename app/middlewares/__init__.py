@@ -11,6 +11,7 @@ from aiogram import Bot
 from aiogram.types import CallbackQuery, Chat, TelegramObject, User
 from aiogram.enums import ChatType
 from app.utils.helpers import is_admin
+from sqlalchemy.orm.exc import StaleDataError
 from config import get_settings
 from database import get_db
 from database.repositories import get_setting_bool
@@ -31,6 +32,13 @@ class DbSessionMiddleware:
             data["session"] = session
             try:
                 result = await handler(event, data)
+            except StaleDataError:
+                await session.rollback()
+                state = data.get("state")
+                if state:
+                    await state.clear()
+                await event.answer("⚠️ تغيّر التطبيق أثناء التعديل. افتحه مجددًا واقرأ النسخة الحالية.")
+                return
             except asyncio.CancelledError:
                 await session.rollback()
                 raise

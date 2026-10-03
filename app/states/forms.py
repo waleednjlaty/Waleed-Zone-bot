@@ -5,14 +5,11 @@ from aiogram.fsm.state import State, StatesGroup
 
 class UploadStates(StatesGroup):
     waiting_file = State()
-    waiting_remote_url = State()          # للتحميل الريموتلي الكامل
-    waiting_shrink_only_url = State()     # لاختصار الرابط فقط بدون رفع
     waiting_name = State()
     waiting_description = State()
     waiting_version = State()
     waiting_platform = State()
     waiting_category = State()
-    waiting_link = State()
     waiting_icon = State()
     waiting_publish_choice = State()
 

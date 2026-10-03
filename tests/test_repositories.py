@@ -41,6 +41,8 @@ async def test_application_crud_and_search(db):
         assert got.name == "MyApp"
         assert got.image_url == image_url
 
+        app.published = True
+        await session.flush()
         apps = await repo.list_applications(session, active_only=True, limit=10)
         assert any(a.id == app.id for a in apps)
 
@@ -55,6 +57,8 @@ async def test_favorites_flow(db):
         user = await repo.get_or_create_user(session, telegram_id=555000, username="favuser")
         app = await repo.create_application(session, name="FavApp", search_text="favapp")
 
+        app.published = True
+        await session.flush()
         await repo.add_favorite(session, user.telegram_id, app.id)
         is_fav = await repo.is_favorite(session, user.telegram_id, app.id)
         assert is_fav is True

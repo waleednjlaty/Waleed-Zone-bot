@@ -1,3 +1,4 @@
+# DEPRECATED: offline legacy reference only; never imported by runtime upload flow.
 """تكامل رسمي مع DevUploads (devuploads.com) باستخدام وثائقهم الرسمية.
 
 التدفق الموثق (من https://devuploads.com/api و script الرفع الرسمي upload.sh):

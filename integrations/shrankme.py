@@ -1,3 +1,4 @@
+# DEPRECATED: offline legacy reference only; never imported by runtime upload flow.
 """تكامل رسمي مع ShrinkMe.io باستخدام نمط الـ API الموثق.
 
 النمط الموثق والمستخدم حاليًا:

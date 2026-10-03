@@ -305,6 +305,9 @@ async def _show_preview(message: Message, state: FSMContext) -> None:
 
 
 async def _publish_to_channel(call: CallbackQuery, app) -> None:
+    if not is_admin(call.from_user.id):
+        await call.answer("⛔", show_alert=True)
+        return
     settings = get_settings()
     if not settings.CHANNEL_ID:
         await call.message.answer(
@@ -312,25 +315,9 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
         )
         return
 
-    try:
-        me = await call.bot.me()
-        bot_username = me.username or ""
-    except Exception:
-        bot_username = ""
-
-    deep_link = f"https://t.me/{bot_username}?start=app_{app.id}" if bot_username else ""
-    text = (
-        "━━━━━━━━━━━━━━\n"
-        f"🎮 {escape_html(app.name)}\n"
-        f"📦 الإصدار: {escape_html(app.version or '—')}\n"
-        f"💾 الحجم: {escape_html(app.size or '—')}\n"
-        f"💻 النظام: {escape_html(app.platform or '—')}\n"
-        "━━━━━━━━━━━━━━\n\n"
-        f"📝 {escape_html(app.description or '')}"
-    )
-    text = append_app_footer(text)
-    if deep_link:
-        text += "\n\n" + download_link_block(deep_link, title="تحميل اللعبة")
+    # Keep SteamRIP's source/extractor semantics, with a stable website CTA.
+    from app.handlers.upload import channel_promo
+    text, keyboard = channel_promo(app)
 
     photo = app.image_url or app.icon_file_id
 
@@ -340,9 +327,11 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
                 settings.CHANNEL_ID,
                 photo=photo,
                 caption=text,
+                reply_markup=keyboard,
             )
         else:
-            await call.bot.send_message(settings.CHANNEL_ID, text)
+            await call.bot.send_message(settings.CHANNEL_ID, text, reply_markup=keyboard)
+        app.published = True
         await call.message.answer("📢 تم نشر اللعبة في القناة بنجاح.")
     except Exception:
         logger.exception("SteamRIP channel publish failed")
@@ -352,7 +341,7 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
 @router.callback_query(F.data.startswith("rip_dl:") | F.data.startswith("rip_refresh:"))
 async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> None:
     app_id = int(call.data.split(":")[1])
-    app = await repo.get_application(session, app_id)
+    app = await repo.get_active_application(session, app_id)
     if not app:
         await call.answer("❌ لم يتم العثور على اللعبة.", show_alert=True)
         return
@@ -465,7 +454,7 @@ async def on_custom_link_received(
 
     data = await state.get_data()
     app_id = data.get("target_app_id")
-    app = await repo.get_application(session, app_id)
+    app = await repo.get_active_application(session, app_id)
     if not app:
         await message.reply("❌ تعذر العثور على التطبيق في قاعدة البيانات.")
         await state.clear()
@@ -771,7 +760,7 @@ async def on_rip_confirm(
         await session.rollback()
         await call.message.answer(
             "❌ فشل حفظ اللعبة بصورة صحيحة. لم يتم حفظ سجل ناقص.\n\n"
-            f"السبب: {escape_html(str(exc))}"
+            "راجع إعدادات المصدر والصورة ثم أعد المحاولة."
         )
         return
 

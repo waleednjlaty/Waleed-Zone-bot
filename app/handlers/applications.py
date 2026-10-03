@@ -143,6 +143,17 @@ async def on_download(
     url: str | None = None
     status_msg = None
 
+    # All Telegram-backed apps use the stable website download contract.
+    source = await repo.get_delivery_source(session, app.id)
+    if source:
+        from app.utils.website import website_download_url
+        url = website_download_url(app.id)
+        if not url:
+            await call.message.answer("❌ إعداد رابط الموقع غير صالح.")
+            return
+        await call.message.answer("🌐 حمّل من Waleed Zone:\n" + download_link_block(url))
+        return
+
     # رابط مخصص محفوظ من الإدارة له الأولوية.
     if app.shrankme_url:
         url = app.shrankme_url

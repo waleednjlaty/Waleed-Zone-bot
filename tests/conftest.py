@@ -19,8 +19,6 @@ _TMP = tempfile.mkdtemp(prefix="waleed_bot_test_")
 os.environ.setdefault("BOT_TOKEN", "123456:TEST-TOKEN")
 os.environ.setdefault("ADMIN_IDS", "111,222")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{Path(_TMP) / 'test.db'}")
-os.environ.setdefault("DEVUPLOAD_API_KEY", "test_devupload_key")
-os.environ.setdefault("SHRANKME_API_KEY", "test_shrankme_key")
 
 
 @pytest.fixture()

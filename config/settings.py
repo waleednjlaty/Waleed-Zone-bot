@@ -48,16 +48,9 @@ class Settings(BaseSettings):
     GROUP_ID: int | None = None
     GROUP_USERNAME: str | None = None
 
-    # --- Dev Uploads (devuploads.com) ---
-    DEVUPLOAD_API_KEY: str | None = None
-    DEVUPLOAD_BASE_URL: str = "https://devuploads.com"
-    DEVUPLOAD_TIMEOUT: float = 600.0
-
-    # --- ShrinkMe.io ---
-    SHRANKME_API_KEY: str | None = None
-    SHRANKME_API_URL: str = "https://shrinkme.io/st"
-    SHRANKME_LEGACY_API_URL: str = "https://shrinkme.io/api"
-    SHRANKME_TIMEOUT: float = 60.0
+    # Public file storage channel. A partial pair never falls back to main channel.
+    FILES_CHANNEL_ID: int | None = None
+    FILES_CHANNEL_USERNAME: str | None = None
 
     # --- ImgBB (رفع الصور) ---
     IMGBB_API_KEY: str | None = None
@@ -70,6 +63,7 @@ class Settings(BaseSettings):
     HTTP_MAX_RETRIES: int = 3
     DOWNLOAD_DIR: Path = BASE_DIR / "tmp" / "uploads"
 
+    WEBSITE_BASE_URL: str = "https://waleed-zone.up.railway.app"
     WEBSITE_STATS_URL: str = "https://waleed-zone.up.railway.app/api/stats"
     WEBSITE_STATS_TOKEN: str | None = None
 

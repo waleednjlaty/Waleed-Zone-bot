@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import (
     AppRequest,
     Application,
+    DeliverySource,
     BannedWord,
     Download,
     Favorite,
@@ -149,17 +150,19 @@ async def get_active_application(
     session: AsyncSession, app_id: int
 ) -> Application | None:
     return await session.scalar(
-        select(Application).where(Application.id == app_id, Application.active.is_(True))
+        select(Application).where(Application.id == app_id, Application.active.is_(True), Application.published.is_(True))
     )
 
 
 async def list_applications(
-    session: AsyncSession, *, active_only: bool = True, limit: int = 200
+    session: AsyncSession, *, active_only: bool = True, public_only: bool = True, limit: int = 200
 ) -> list[Application]:
     stmt = select(Application)
     if active_only:
         stmt = stmt.where(Application.active.is_(True))
-    stmt = stmt.order_by(Application.created_at.desc()).limit(limit)
+    if public_only:
+        stmt = stmt.where(Application.published.is_(True))
+    stmt = stmt.order_by(Application.id.desc()).limit(limit)
     return list((await session.scalars(stmt)).all())
 
 
@@ -168,7 +171,7 @@ async def list_latest(
 ) -> list[Application]:
     stmt = (
         select(Application)
-        .where(Application.active.is_(True))
+        .where(Application.active.is_(True), Application.published.is_(True))
         .order_by(Application.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -183,6 +186,7 @@ async def list_by_category(
         select(Application)
         .where(
             Application.active.is_(True),
+            Application.published.is_(True),
             func.lower(Application.category) == category.lower(),
         )
         .order_by(Application.created_at.desc())
@@ -197,6 +201,7 @@ async def list_categories(session: AsyncSession) -> list[str]:
         select(Application.category)
         .where(
             Application.active.is_(True),
+            Application.published.is_(True),
             Application.category.is_not(None),
             Application.category != "",
         )
@@ -214,8 +219,8 @@ async def search_applications(
         select(Application)
         .where(
             Application.active.is_(True),
-            Application.search_text.is_not(None),
-            Application.search_text.ilike(q),
+            Application.published.is_(True),
+            (Application.search_text.ilike(q) | Application.name.ilike(q) | Application.description.ilike(q)),
         )
         .order_by(Application.downloads.desc())
         .limit(limit)
@@ -230,10 +235,11 @@ async def update_application(session: AsyncSession, app: Application) -> None:
 async def set_application_active(
     session: AsyncSession, app_id: int, active: bool
 ) -> None:
-    await session.execute(
-        update(Application).where(Application.id == app_id).values(active=active)
-    )
-    await session.flush()
+    app = await get_application(session, app_id)
+    if app:
+        app.active = active
+        app.published = False
+        await session.flush()
 
 
 async def delete_application(session: AsyncSession, app_id: int) -> None:
@@ -391,6 +397,7 @@ async def list_favorites(
         .where(
             Favorite.user_id == user_id,
             Application.active.is_(True),
+            Application.published.is_(True),
         )
         .order_by(Favorite.created_at.desc())
         .offset(offset)
@@ -577,3 +584,42 @@ async def count_group_logs(session: AsyncSession, chat_id: int) -> int:
         )
         or 0
     )
+
+
+async def get_delivery_source(session: AsyncSession, app_id: int) -> DeliverySource | None:
+    return await session.get(DeliverySource, (app_id, "telegram"))
+
+
+async def bind_telegram_source(session: AsyncSession, app_id: int, metadata: dict, *, expected_revision: int | None = None) -> DeliverySource:
+    """Lock the shared application first, then upsert its source in the SAME transaction."""
+    from app.services.upload_service import validate_source
+    from sqlalchemy.orm.exc import StaleDataError
+    validate_source(metadata)
+    app = await session.scalar(select(Application).where(Application.id == app_id).with_for_update().execution_options(populate_existing=True))
+    if app is None:
+        raise ValueError("APPLICATION_NOT_FOUND")
+    if expected_revision is not None and app.revision != expected_revision:
+        raise StaleDataError("STALE_REVISION")
+    source = await get_delivery_source(session, app_id)
+    if source is None:
+        source = DeliverySource(application_id=app_id, provider="telegram")
+        session.add(source)
+    for field in ("telegram_chat_id", "telegram_message_id", "telegram_channel_username", "telegram_file_id", "filename", "size_bytes", "mime_type"):
+        setattr(source, field, metadata.get(field))
+    source.updated_at = datetime.now(timezone.utc)
+    await session.flush()
+    # PostgreSQL source trigger advances revision for both clients; SQLite tests
+    # deliberately update the app as the equivalent local-only behavior.
+    if session.bind.dialect.name == "sqlite":
+        app.updated_at = datetime.now(timezone.utc)
+        await session.flush()
+    await session.refresh(app)
+    return source
+
+
+async def archive_application(session: AsyncSession, app_id: int) -> None:
+    app = await get_application(session, app_id)
+    if app:
+        app.active = False
+        app.published = False
+        await session.flush()

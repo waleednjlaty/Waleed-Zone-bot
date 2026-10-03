@@ -60,11 +60,16 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
-def app_manage_keyboard(app_id: int, active: bool, page: int) -> InlineKeyboardMarkup:
+def app_manage_keyboard(
+    app_id: int,
+    active: bool,
+    page: int,
+    website_url: str | None = None,
+) -> InlineKeyboardMarkup:
     kb = [
         [
             InlineKeyboardButton(text="✏️ تعديل", callback_data=AdminCB(action="edit_app", app_id=app_id, page=page).pack()),
-            InlineKeyboardButton(text="🗑 حذف", callback_data=AdminCB(action="delete_ask", app_id=app_id, page=page).pack()),
+            InlineKeyboardButton(text="📦 أرشفة", callback_data=AdminCB(action="delete_ask", app_id=app_id, page=page).pack()),
         ],
         [
             InlineKeyboardButton(text="🔗 رابط التحميل", callback_data=AdminCB(action="app_link", app_id=app_id, page=page).pack()),
@@ -77,8 +82,11 @@ def app_manage_keyboard(app_id: int, active: bool, page: int) -> InlineKeyboardM
                 callback_data=AdminCB(action="toggle", app_id=app_id, page=page).pack(),
             ),
         ],
-        [InlineKeyboardButton(text="⬅️ رجوع", callback_data=AdminCB(action="apps", page=page).pack())],
     ]
+    kb.append([InlineKeyboardButton(text="📎 ربط ملف Telegram", callback_data=AdminCB(action="attach_file", app_id=app_id, page=page).pack())])
+    if website_url:
+        kb.append([InlineKeyboardButton(text="🌐 فتح في Waleed Zone", url=website_url)])
+    kb.append([InlineKeyboardButton(text="⬅️ رجوع", callback_data=AdminCB(action="apps", page=page).pack())])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
@@ -86,7 +94,7 @@ def delete_confirm_keyboard(app_id: int, page: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🗑 نعم، احذف", callback_data=AdminCB(action="delete_yes", app_id=app_id, page=page).pack()),
+                InlineKeyboardButton(text="📦 نعم، أرشف", callback_data=AdminCB(action="delete_yes", app_id=app_id, page=page).pack()),
                 InlineKeyboardButton(text="❌ إلغاء", callback_data=AdminCB(action="app_manage", app_id=app_id, page=page).pack()),
             ]
         ]
