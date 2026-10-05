@@ -393,7 +393,7 @@ async def _publish_to_channel(call: CallbackQuery,session: AsyncSession,app) -> 
         return
     settings=get_settings()
     if not settings.CHANNEL_ID:
-        await call.message.answer("⚠️ CHANNEL_ID غير مضبوط. بقي التطبيق مسودة.")
+        await call.message.answer("⚠️ CHANNEL_ID غير مضبوط. لم يُنشر الإعلان بالقناة.")
         return
     app=await session.scalar(select(Application).where(Application.id==app.id).with_for_update().execution_options(populate_existing=True))
     if not app or not app.active:
