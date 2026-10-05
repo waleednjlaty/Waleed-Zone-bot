@@ -8,7 +8,13 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions,
+    Message,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.keyboards.user import cancel_keyboard
@@ -329,9 +335,13 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
                 photo=photo,
                 caption=text,
                 reply_markup=keyboard,
+                parse_mode="HTML",
             )
         else:
-            await call.bot.send_message(settings.CHANNEL_ID, text, reply_markup=keyboard)
+            await call.bot.send_message(
+                settings.CHANNEL_ID, text, reply_markup=keyboard, parse_mode="HTML",
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
         app.published = True
         await call.message.answer("📢 تم نشر اللعبة في القناة بنجاح.")
     except Exception:
