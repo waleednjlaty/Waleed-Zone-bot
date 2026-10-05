@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     WEBSITE_STATS_URL: str = "https://waleed-zone.up.railway.app/api/stats"
     WEBSITE_STATS_TOKEN: str | None = Field(default=None,repr=False)
 
+    # Must match the website's LEGACY_DOWNLOAD_ALLOWED_HOSTS value.
+    LEGACY_DOWNLOAD_ALLOWED_HOSTS: str = "devuploads.com,shrinkme.io,shrinkme.site"
+
     @property
     def admin_ids(self) -> list[int]:
         """معرفات المالكين كقائمة أرقام."""
