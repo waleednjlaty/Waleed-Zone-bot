@@ -13,6 +13,7 @@ from app.handlers import (
     admin,
     applications,
     group,
+    manual_game,
     requests,
     search,
     start,
@@ -52,6 +53,7 @@ def register_all_routers(dp: Dispatcher) -> None:
 
     dp.include_router(start.router)
     dp.include_router(applications.router)
+    dp.include_router(manual_game.router)
     dp.include_router(steamrip_router)
     dp.include_router(search.router)
     dp.include_router(requests.router)
