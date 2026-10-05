@@ -16,8 +16,9 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
     kb = [
         [_button("📊 الإحصائيات", AdminCB(action="stats", page=0).pack()),
          _button("⚙️ الإعدادات", AdminCB(action="settings", page=0).pack())],
-        [_button("🚀 رفع تطبيق", AppCB(action="upload", app_id=0).pack()),
-         _button("🎮 إضافة لعبة", AdminCB(action="add_rip_game", page=0).pack())],
+        [_button("📤 رفع ملف", AppCB(action="upload", app_id=0).pack()),
+         _button("🔗 إضافة برابط", AdminCB(action="add_link_app", page=0).pack())],
+        [_button("🎮 إضافة من SteamRIP", AdminCB(action="add_rip_game", page=0).pack())],
         [_button("📱 إدارة التطبيقات", AdminCB(action="apps", page=0).pack()),
          _button("📥 طلبات التطبيقات", AdminCB(action="requests", page=0).pack())],
         [_button("📢 نشر في القناة", AdminCB(action="publish_select", page=0).pack()),
@@ -50,10 +51,11 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
         kb.append(nav)
     kb.append(
         [
-            _button("➕ إضافة تطبيق", AdminCB(action="add_app", page=0).pack()),
-            _button("🎮 إضافة لعبة", AdminCB(action="add_rip_game", page=0).pack()),
+            _button("📤 رفع ملف", AdminCB(action="add_app", page=0).pack()),
+            _button("🔗 إضافة برابط", AdminCB(action="add_link_app", page=0).pack()),
         ]
     )
+    kb.append([_button("🎮 إضافة من SteamRIP", AdminCB(action="add_rip_game", page=0).pack())])
     kb.append(
         [_button("⚙️ لوحة الإدارة", AdminCB(action="panel", page=0).pack())]
     )
