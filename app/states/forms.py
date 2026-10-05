@@ -5,11 +5,14 @@ from aiogram.fsm.state import State, StatesGroup
 
 class UploadStates(StatesGroup):
     waiting_file = State()
+    waiting_external_url = State()
     waiting_name = State()
     waiting_description = State()
     waiting_version = State()
+    waiting_size = State()
     waiting_platform = State()
     waiting_category = State()
+    waiting_developer = State()
     waiting_icon = State()
     waiting_publish_choice = State()
 
