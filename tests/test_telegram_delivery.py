@@ -128,10 +128,12 @@ async def test_attachment_stale_revision_denied(db):
 
 def test_channel_publishing_download_cta_is_website():
     from app.handlers.upload import channel_promo
-    app=SimpleNamespace(id=123,name='App',version='1',size='24 B',description='Test')
+    app=SimpleNamespace(id=123,name='App <test> & title',version='1',size='24 B',description='Test')
     text,kb=channel_promo(app)
-    assert kb.inline_keyboard[0][0].text=='🌐 تحميل من Waleed Zone'
-    assert kb.inline_keyboard[0][0].url=='https://waleed-zone.up.railway.app/download/123'
+    assert kb is None
+    assert '<a href="https://waleed-zone.up.railway.app/download/123">' in text
+    assert '🟢 اضغط هنا لبدء التحميل الآن 🟢' in text
+    assert 'App &lt;test&gt; &amp; title' in text
     assert 'devuploads' not in text and 'shrinkme' not in text and 't.me/' not in text
 
 

@@ -6,7 +6,13 @@ from urllib.parse import urlsplit
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions,
+    Message,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
@@ -17,8 +23,8 @@ from app.states import UploadStates
 from app.utils.constants import AdminCB, AppCB, MainMenuCB
 from app.utils.helpers import build_search_text, format_size, is_admin
 from app.utils.owner_guard import owner_gate
-from app.utils.text import escape_html
-from app.utils.website import website_app_url, website_download_url
+from app.utils.text import download_link_block, escape_html
+from app.utils.website import website_download_url
 from config import get_settings
 from database import repositories as repo
 from database.models import Application
@@ -380,11 +386,9 @@ def channel_promo(app):
     # Caption limit is 1024; Telegram text and captions are escaped before display.
     text=(f"📱 {escape_html(app.name[:150])}\n📦 {escape_html(app.version or '—')}\n💾 {escape_html(app.size or '—')}\n\n"
         f"📝 {escape_html((app.description or '')[:450])}")
-    rows=[[InlineKeyboardButton(text="🌐 تحميل من Waleed Zone",url=download_url)]]
-    details=website_app_url(app.id)
-    if details:
-        rows.append([InlineKeyboardButton(text="🌐 تفاصيل التطبيق",url=details)])
-    return text,InlineKeyboardMarkup(inline_keyboard=rows)
+    # New promos match the existing in-message download style, without URL buttons.
+    text += "\n\n" + download_link_block(download_url)
+    return text, None
 
 
 async def _publish_to_channel(call: CallbackQuery,session: AsyncSession,app) -> None:
@@ -403,13 +407,19 @@ async def _publish_to_channel(call: CallbackQuery,session: AsyncSession,app) -> 
         text,kb=channel_promo(app)
         photo=app.image_url or app.icon_file_id
         if photo:
-            await call.bot.send_photo(settings.CHANNEL_ID,photo=photo,caption=text,reply_markup=kb)
+            await call.bot.send_photo(
+                settings.CHANNEL_ID, photo=photo, caption=text,
+                reply_markup=kb, parse_mode="HTML",
+            )
         else:
-            await call.bot.send_message(settings.CHANNEL_ID,text,reply_markup=kb)
+            await call.bot.send_message(
+                settings.CHANNEL_ID, text, reply_markup=kb, parse_mode="HTML",
+                link_preview_options=LinkPreviewOptions(is_disabled=True),
+            )
     except Exception:
         logger.warning("Channel promo publish failed")
         await call.message.answer("❌ تعذر نشر الإعلان. تحقق من إعدادات القناة والصورة.")
         return
     app.published=True
     await session.flush()
-    await call.message.answer("📢 تم النشر. زر التحميل يفتح Waleed Zone.")
+    await call.message.answer("📢 تم النشر. رابط التحميل داخل الرسالة يفتح Waleed Zone.")
