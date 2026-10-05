@@ -18,6 +18,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
          _button("⚙️ الإعدادات", AdminCB(action="settings", page=0).pack())],
         [_button("🚀 رفع تطبيق", AppCB(action="upload", app_id=0).pack()),
          _button("🎮 إضافة لعبة", AdminCB(action="add_rip_game", page=0).pack())],
+        [_button("🔗 إضافة لعبة برابط يدوي", AdminCB(action="add_manual_game").pack())],
         [_button("📱 إدارة التطبيقات", AdminCB(action="apps", page=0).pack()),
          _button("📥 طلبات التطبيقات", AdminCB(action="requests", page=0).pack())],
         [_button("📢 نشر في القناة", AdminCB(action="publish_select", page=0).pack()),
@@ -57,6 +58,7 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     kb.append(
         [_button("⚙️ لوحة الإدارة", AdminCB(action="panel", page=0).pack())]
     )
+    kb.insert(-1, [_button("🔗 إضافة لعبة برابط يدوي", AdminCB(action="add_manual_game").pack())])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
