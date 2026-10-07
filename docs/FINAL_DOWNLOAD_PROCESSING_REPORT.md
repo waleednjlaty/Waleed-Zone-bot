@@ -31,6 +31,8 @@ Finite BZZHR hosts are `bzzhr.to`, `bzzhr.co`, `buzzheavier.com` plus their expl
 
 The default manual host policy matches the website: `devuploads.com,shrinkme.io,shrinkme.site`. Customized `LEGACY_DOWNLOAD_ALLOWED_HOSTS` must match on both deployments. Shared SQLAlchemy fields (`revision`, active/published/developer, source fields and counters) remain compatible; no catalog columns are deleted or synchronized to another DB.
 
+CI exposed a missing runtime dependency when SQLAlchemy 2.1 is freshly installed: asyncio now needs the explicit `sqlalchemy[asyncio]` extra. The requirement was corrected so greenlet is installed on fresh production/CI builds.
+
 ## Validation and limitations
 
 Complete local pytest: **182 passed** after the transaction, footer, provider and publication changes. Security-helper Ruff check and Python compilation also passed locally. The local pip-audit package could not be obtained from the available index; dependency audit remains a required CI gate. Python compilation is included in repository CI. CI also runs the existing security-helper lint and production dependency audit.
