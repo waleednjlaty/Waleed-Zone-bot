@@ -115,3 +115,61 @@ def test_no_browser_challenge_bypass_remains():
     assert 'solve_cloudflare=True' not in text
     assert 'StealthySession' not in text
     assert '_configured_proxy' not in text
+
+
+async def test_channel_promo_releases_db_before_telegram_and_rechecks_revision(db, monkeypatch):
+    from app.handlers import upload
+    monkeypatch.setattr(upload, 'get_settings', lambda: SimpleNamespace(CHANNEL_ID=-1001))
+    async with db.session() as session:
+        app = await repo.create_application(session, name='Channel QA', devupload_url='https://shrinkme.io/qa')
+        await session.commit()
+        async def send(*args, **kwargs):
+            assert not session.in_transaction()
+            assert kwargs.get('parse_mode') == 'HTML'
+            assert args[1].count(APP_DOWNLOAD_FOOTER) == 1
+            async with db.session() as editor:
+                current = await repo.get_application(editor, app.id)
+                current.active = False
+                await editor.commit()
+            return SimpleNamespace(message_id=77)
+        call = SimpleNamespace(from_user=SimpleNamespace(id=111), answer=AsyncMock(),
+            message=SimpleNamespace(answer=AsyncMock()), bot=SimpleNamespace(send_message=AsyncMock(side_effect=send), delete_message=AsyncMock()))
+        await upload._publish_to_channel(call, session, app)
+        call.bot.delete_message.assert_awaited_once_with(-1001, 77)
+        async with db.session() as reader:
+            current = await repo.get_application(reader, app.id)
+            assert not current.published
+
+
+async def test_copied_telegram_file_caption_footer(db, monkeypatch):
+    from test_telegram_delivery import incoming, settings
+    from app.services.upload_service import UploadService
+    monkeypatch.setattr('app.services.upload_service.get_settings', lambda: settings())
+    message = incoming()
+    await UploadService().copy(message)
+    caption = message.bot.copy_message.call_args.kwargs['caption']
+    assert caption.count(APP_DOWNLOAD_FOOTER) == 1
+    assert visible_units(caption) <= 1024
+
+
+async def test_owner_preview_bounds_html_before_caption_formatting():
+    from app.handlers.steamrip import _show_preview
+    app = app_fixture()
+    state = SimpleNamespace(get_data=AsyncMock(return_value={**vars(app), 'image_url': 'https://example.test/image.png'}), set_state=AsyncMock())
+    message = SimpleNamespace(answer_photo=AsyncMock(), answer=AsyncMock())
+    await _show_preview(message, state)
+    caption = message.answer_photo.call_args.kwargs['caption']
+    assert visible_units(caption) <= 1024
+    assert '<script>' not in caption
+    message.answer.assert_not_awaited()
+
+
+def test_provider_url_budget_and_explicit_port_fail_closed():
+    from integrations.public_http import public_url
+    assert not extractor._looks_like_direct_download('https://fafda.to/d/file?v=' + 'x' * 2000)
+    with pytest.raises(ValueError):
+        public_url('https://bzzhr.to:443/file', {'bzzhr.to'})
+
+@pytest.mark.parametrize('url', ['https://fafda.to/d/file/a%0A?v=x', 'https://fafda.to/d/file/%zz?v=x'])
+def test_encoded_destination_fails_closed(url):
+    assert not extractor._looks_like_direct_download(url)

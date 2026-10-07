@@ -111,12 +111,16 @@ class UploadService:
             "mime_type": document.mime_type,
         }
         validate_source(source)
+        from app.utils.text import append_app_footer, bounded_html
+
+        caption = append_app_footer("📦 " + bounded_html(document.file_name or "ملف التطبيق", 150))
         copied = await asyncio.wait_for(
             message.bot.copy_message(
                 chat_id=chat_id,
                 from_chat_id=message.chat.id,
                 message_id=message.message_id,
-                caption="",
+                caption=caption,
+                parse_mode="HTML",
                 disable_notification=True,
             ),
             30,

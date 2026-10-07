@@ -18,7 +18,12 @@ import aiohttp
 def public_url(value: str, allowed_hosts: set[str] | None = None) -> str:
     if not isinstance(value, str) or not value or len(value) > 4096:
         raise ValueError("INVALID_PUBLIC_URL")
-    if any(unicodedata.category(c) in {"Cc", "Cf"} for c in value) or "\\" in value or "#" in value or any(c.isspace() for c in value):
+    if (
+        any(unicodedata.category(c) in {"Cc", "Cf"} for c in value)
+        or "\\" in value
+        or "#" in value
+        or any(c.isspace() for c in value)
+    ):
         raise ValueError("INVALID_PUBLIC_URL")
     parsed = urlsplit(value)
     if (
@@ -26,7 +31,7 @@ def public_url(value: str, allowed_hosts: set[str] | None = None) -> str:
         or not parsed.hostname
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.port not in {None, 443}
+        or parsed.port is not None
         or parsed.fragment
     ):
         raise ValueError("INVALID_PUBLIC_URL")
@@ -91,21 +96,38 @@ async def fetch_public_response(
     raise_status=True,
 ):
     connector = aiohttp.TCPConnector(resolver=PublicResolver(), use_dns_cache=False)
-    async with asyncio.timeout(timeout), aiohttp.ClientSession(
-        connector=connector, trust_env=False, timeout=aiohttp.ClientTimeout(total=timeout, connect=5, sock_connect=5, sock_read=5)
-    ) as session:
+    async with (
+        asyncio.timeout(timeout),
+        aiohttp.ClientSession(
+            connector=connector,
+            trust_env=False,
+            timeout=aiohttp.ClientTimeout(total=timeout, connect=5, sock_connect=5, sock_read=5),
+        ) as session,
+    ):
         for _ in range(5):
             public_url(url, allowed_hosts)
             async with session.get(url, headers=headers, allow_redirects=False) as response:
                 if follow and response.status in {301, 302, 303, 307, 308}:
                     location = response.headers.get("Location")
-                    if not location:
+                    if (
+                        not location
+                        or any(
+                            c.isspace() or unicodedata.category(c) in {"Cc", "Cf"} for c in location
+                        )
+                        or "\\" in location
+                    ):
                         raise ValueError("INVALID_REDIRECT")
                     url = public_url(urljoin(url, location), allowed_hosts)
                     continue
                 if raise_status:
                     response.raise_for_status()
-                if response.headers.get("HX-Redirect") or response.status in {301, 302, 303, 307, 308}:
+                if response.headers.get("HX-Redirect") or response.status in {
+                    301,
+                    302,
+                    303,
+                    307,
+                    308,
+                }:
                     return b"", "", str(response.url), dict(response.headers), response.status
                 content_type = response.headers.get("Content-Type", "").split(";", 1)[0]
                 if image and content_type not in {
@@ -123,7 +145,13 @@ async def fetch_public_response(
                     body.extend(chunk)
                     if len(body) > max_bytes:
                         raise ValueError("RESPONSE_TOO_LARGE")
-                return bytes(body), content_type, str(response.url), dict(response.headers), response.status
+                return (
+                    bytes(body),
+                    content_type,
+                    str(response.url),
+                    dict(response.headers),
+                    response.status,
+                )
     raise ValueError("TOO_MANY_REDIRECTS")
 
 

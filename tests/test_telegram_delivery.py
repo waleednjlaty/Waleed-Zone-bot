@@ -1,3 +1,4 @@
+from app.utils.text import append_app_footer
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from pathlib import Path
@@ -54,7 +55,7 @@ async def test_copy_uses_only_telegram_message_api(monkeypatch):
     monkeypatch.setattr('app.services.upload_service.get_settings',lambda:settings())
     message=incoming(); metadata=await UploadService().copy(message)
     assert metadata==source()
-    message.bot.copy_message.assert_awaited_once_with(chat_id=-1001,from_chat_id=111,message_id=7,caption='',disable_notification=True)
+    message.bot.copy_message.assert_awaited_once_with(chat_id=-1001,from_chat_id=111,message_id=7,caption=append_app_footer('📦 qa.apk'),parse_mode='HTML',disable_notification=True)
     message.bot.download.assert_not_called();message.bot.get_file.assert_not_called()
 
 
@@ -64,7 +65,7 @@ async def test_copy_resolves_files_channel_id_from_username(monkeypatch):
     metadata=await UploadService().copy(message)
     message.bot.get_chat.assert_awaited_once_with('@main_channel')
     assert metadata['telegram_chat_id']==-1001
-    message.bot.copy_message.assert_awaited_once_with(chat_id=-1001,from_chat_id=111,message_id=7,caption='',disable_notification=True)
+    message.bot.copy_message.assert_awaited_once_with(chat_id=-1001,from_chat_id=111,message_id=7,caption=append_app_footer('📦 qa.apk'),parse_mode='HTML',disable_notification=True)
 
 
 async def test_non_admin_upload_denied(monkeypatch):

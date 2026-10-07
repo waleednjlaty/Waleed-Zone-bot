@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import unicodedata
 import logging
 import aiohttp
 import re
 from collections.abc import Mapping
-from urllib.parse import parse_qs, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
@@ -268,20 +269,24 @@ def _looks_like_direct_download(url: str) -> bool:
     except Exception:
         return False
 
+    if len(url) > 2000:
+        return False
     try:
         public_url(url, BZZHR_FILE_HOSTS)
     except ValueError:
         return False
 
-    parts = [part for part in parsed.path.split("/") if part]
-    if len(parts) < 2 or parts[0] != "d":
+    if not re.fullmatch(r"/d/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.%()-]+)*", parsed.path):
         return False
+    if re.search(r"%(?![0-9a-fA-F]{2})", parsed.path + parsed.query):
+        return False
+    values = parse_qs(parsed.query).get("v", [])
+    return len(values) == 1 and bool(values[0]) and not any(unicodedata.category(c) in {"Cc", "Cf"} or c == "\\" for c in unquote(parsed.path + parsed.query))
 
-    return bool(parse_qs(parsed.query).get("v"))
 
 
 def _looks_like_cloudflare_challenge(status: int, html: str) -> bool:
-    """ميّز صفحة Cloudflare الحقيقية قبل تشغيل solver الثقيل."""
+    """ميّز التحقق البشري لإغلاق المعالجة بأمان."""
     body = (html or "").lower()
     markers = (
         "cf-chl-",
@@ -333,7 +338,7 @@ def _extract_signed_download_endpoint(html: str, page_url: str) -> str | None:
 
     for element in soup.select('[hx-get*="/download"]'):
         hx_get = (element.get("hx-get") or "").strip()
-        if not hx_get:
+        if not hx_get or any(c.isspace() or ord(c) < 32 for c in hx_get):
             continue
 
         endpoint = _normalize_url(hx_get, page_url)
@@ -413,7 +418,7 @@ async def fetch_game_data(page_url: str) -> dict:
     if image_url:
         logger.info("SteamRIP game image found: %s", _safe_url_for_log(image_url))
     else:
-        logger.warning("SteamRIP game image was not found for %s", final_page_url)
+        logger.warning("SteamRIP game image unavailable host=%s", urlsplit(final_page_url).hostname)
 
     download_buttons = soup.select(
         "a.shortc-button, "
@@ -457,7 +462,7 @@ async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | Non
     headers = dict(HEADERS)
     if _source_referer(source_page_url):
         headers["Referer"] = source_page_url
-    body, _, page_url, _, status = await fetch_public_response(
+    body, _, page_url, page_headers, status = await fetch_public_response(
         candidate_url, allowed_hosts=hosts, headers=headers, max_bytes=1024 * 1024,
         timeout=10, raise_status=False,
     )
@@ -471,9 +476,16 @@ async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | Non
     parsed = urlsplit(endpoint)
     if parsed.path != base.path.rstrip("/") + "/download" or not parse_qs(parsed.query).get("t"):
         return None
+    from http.cookies import SimpleCookie
+    cookies = SimpleCookie()
+    cookies.load(page_headers.get("Set-Cookie") or page_headers.get("set-cookie") or "")
+    cookie_header = "; ".join(f"{key}={value.value}" for key, value in cookies.items())
+    if len(cookie_header) > 2048 or any(ord(c) < 32 for c in cookie_header):
+        return None
     _, _, _, response_headers, status = await fetch_public_response(
         endpoint, allowed_hosts=hosts,
-        headers={"HX-Request": "true", "HX-Current-URL": page_url, "Referer": page_url},
+        headers={"HX-Request": "true", "HX-Current-URL": page_url, "Referer": page_url,
+                 **({"Cookie": cookie_header} if cookie_header else {})},
         max_bytes=64 * 1024, timeout=10, follow=False, raise_status=False,
     )
     if status not in {200, 204, 302, 303}:

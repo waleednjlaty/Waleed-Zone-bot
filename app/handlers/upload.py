@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from urllib.parse import urlsplit
 
 from aiogram import F, Router
@@ -135,6 +136,7 @@ async def on_file(message: Message, state: FSMContext, session: AsyncSession) ->
     data = await state.get_data()
     try:
         service = await build_upload_service()
+        await session.commit()
         source = await service.copy(message)
     except Exception:
         # Provider errors may contain credential-bearing URLs. Never echo/log them.
@@ -348,8 +350,8 @@ async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSes
         await call.answer("✅ تم حفظ التطبيق")
         status = "📦 جاهز للنشر"
     await call.message.answer(
-        f"✅ حُفظ التطبيق #{app.id} — {status}.\n"
-        f"🌐 {escape_html(website_download_url(app.id) or '')}"
+        append_app_footer(f"✅ حُفظ التطبيق #{app.id} — {status}.\n"
+        + download_link_block(website_download_url(app.id) or ""))
     )
     if call.data == "upl:save_publish":
         await _publish_to_channel(call,session,app)
@@ -367,6 +369,9 @@ def channel_promo(app):
     return append_app_footer(text), None
 
 
+_CHANNEL_PROMOS_IN_FLIGHT: set[int] = set()
+
+
 async def _publish_to_channel(call: CallbackQuery,session: AsyncSession,app) -> None:
     if not _only_admin(call):
         await call.answer("⛔",show_alert=True)
@@ -375,27 +380,45 @@ async def _publish_to_channel(call: CallbackQuery,session: AsyncSession,app) -> 
     if not settings.CHANNEL_ID:
         await call.message.answer("⚠️ CHANNEL_ID غير مضبوط. لم يُنشر الإعلان بالقناة.")
         return
-    app=await session.scalar(select(Application).where(Application.id==app.id).with_for_update().execution_options(populate_existing=True))
-    if not app or not app.active:
-        await call.message.answer("⚠️ التطبيق معطل. أعد تفعيله قبل النشر.")
+    app_id=app.id
+    if app_id in _CHANNEL_PROMOS_IN_FLIGHT or len(_CHANNEL_PROMOS_IN_FLIGHT)>=2:
+        await call.message.answer("الإعلان قيد النشر؛ انتظر قليلًا.")
         return
+    _CHANNEL_PROMOS_IN_FLIGHT.add(app_id)
     try:
+        # Snapshot and release reads BEFORE Telegram HTTP; never hold FOR UPDATE across send_photo.
+        app=await session.scalar(select(Application).where(Application.id==app_id).execution_options(populate_existing=True))
+        if not app or not app.active:
+            await session.rollback()
+            await call.message.answer("⚠️ التطبيق معطل. أعد تفعيله قبل النشر.")
+            return
+        revision=app.revision
         text,kb=channel_promo(app)
         photo=app.image_url or app.icon_file_id
+        await session.commit()
         if photo:
-            await call.bot.send_photo(
+            message=await asyncio.wait_for(call.bot.send_photo(
                 settings.CHANNEL_ID, photo=photo, caption=text,
                 reply_markup=kb, parse_mode="HTML",
-            )
+            ),20)
         else:
-            await call.bot.send_message(
+            message=await asyncio.wait_for(call.bot.send_message(
                 settings.CHANNEL_ID, text, reply_markup=kb, parse_mode="HTML",
                 link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
+            ),20)
+        from sqlalchemy import update
+        result=await session.execute(update(Application).where(Application.id==app_id,Application.active.is_(True),Application.revision==revision)
+            .values(published=True).execution_options(synchronize_session=False))
+        await session.commit()
+        if result.rowcount!=1:
+            # Compensate a source/archive edit while Telegram was sending, without DB locks.
+            await asyncio.wait_for(call.bot.delete_message(settings.CHANNEL_ID,message.message_id),10)
+            await call.message.answer("تغيّر التطبيق أثناء النشر. أعد فتحه ثم حاول مجددًا.")
+            return
+        await call.message.answer("📢 تم النشر. رابط التحميل داخل الرسالة يفتح Waleed Zone.")
     except Exception:
-        logger.warning("Channel promo publish failed")
+        await session.rollback()
+        logger.warning("Channel promo unavailable application_id=%s",app_id)
         await call.message.answer("❌ تعذر نشر الإعلان. تحقق من إعدادات القناة والصورة.")
-        return
-    app.published=True
-    await session.flush()
-    await call.message.answer("📢 تم النشر. رابط التحميل داخل الرسالة يفتح Waleed Zone.")
+    finally:
+        _CHANNEL_PROMOS_IN_FLIGHT.discard(app_id)
