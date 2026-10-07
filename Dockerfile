@@ -2,7 +2,6 @@ FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    SCRAPLING_EXECUTABLE_PATH=/usr/bin/chromium \
     HOME=/tmp/botuser \
     XDG_CACHE_HOME=/tmp/botuser/.cache
 
@@ -10,7 +9,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
-    chromium \
     libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 

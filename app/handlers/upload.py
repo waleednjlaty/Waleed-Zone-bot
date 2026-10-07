@@ -23,7 +23,7 @@ from app.states import UploadStates
 from app.utils.constants import AdminCB, AppCB, MainMenuCB
 from app.utils.helpers import build_search_text, format_size, is_admin
 from app.utils.owner_guard import owner_gate
-from app.utils.text import download_link_block, escape_html
+from app.utils.text import append_app_footer, bounded_html, download_link_block, escape_html
 from app.utils.website import website_download_url
 from config import get_settings
 from database import repositories as repo
@@ -67,32 +67,8 @@ def _manual_download_hosts() -> set[str]:
 
 
 def _validate_manual_download_url(value: str) -> str:
-    value = value.strip()
-    if (
-        not value
-        or len(value) > 2000
-        or any(char.isspace() for char in value)
-        or any(ord(char) < 32 for char in value)
-    ):
-        raise ValueError("INVALID_URL")
-    try:
-        parsed = urlsplit(value)
-        port = parsed.port
-    except ValueError as exc:
-        raise ValueError("INVALID_URL") from exc
-    if (
-        parsed.scheme != "https"
-        or not parsed.netloc
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or port is not None
-        or parsed.fragment
-    ):
-        raise ValueError("INVALID_URL")
-    if parsed.hostname.lower() not in _manual_download_hosts():
-        raise ValueError("HOST_NOT_ALLOWED")
-    return value
+    from app.services.download_service import manual_url
+    return manual_url(value.strip(), _manual_download_hosts())
 
 
 @router.callback_query(AppCB.filter(F.action == "upload"))
@@ -384,11 +360,11 @@ def channel_promo(app):
     if not download_url:
         raise ValueError("WEBSITE_URL_NOT_CONFIGURED")
     # Caption limit is 1024; Telegram text and captions are escaped before display.
-    text=(f"📱 {escape_html(app.name[:150])}\n📦 {escape_html(app.version or '—')}\n💾 {escape_html(app.size or '—')}\n\n"
-        f"📝 {escape_html((app.description or '')[:450])}")
+    text=(f"📱 {bounded_html(app.name, 100)}\n📦 {bounded_html(app.version or '—', 40)}\n💾 {bounded_html(app.size or '—', 40)}\n\n"
+        f"📝 {bounded_html(app.description, 250)}")
     # New promos match the existing in-message download style, without URL buttons.
     text += "\n\n" + download_link_block(download_url)
-    return text, None
+    return append_app_footer(text), None
 
 
 async def _publish_to_channel(call: CallbackQuery,session: AsyncSession,app) -> None:

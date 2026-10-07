@@ -158,8 +158,8 @@ async def test_steamrip_download_regression(db,monkeypatch):
     from app.utils.constants import AppCB
     fetch=AsyncMock(return_value={'servers':{'BZZHR':'https://buzzheavier.com/test'}})
     extract=AsyncMock(return_value='https://dl.buzzheavier.com/test')
-    monkeypatch.setattr('app.handlers.applications.fetch_game_data',fetch)
-    monkeypatch.setattr('app.handlers.applications.extract_bzzhr_direct_link',extract)
+    monkeypatch.setattr('app.services.download_service.fetch_game_data',fetch)
+    monkeypatch.setattr('app.services.download_service.extract_bzzhr_direct_link',extract)
     async with db.session() as session:
         await repo.get_or_create_user(session,111)
         app=await repo.create_application(session,name='Steam QA',devupload_url='https://steamrip.com/qa-game/',category='ألعاب كمبيوتر',platform='Windows')
@@ -168,7 +168,7 @@ async def test_steamrip_download_regression(db,monkeypatch):
         call=SimpleNamespace(from_user=SimpleNamespace(id=111),answer=AsyncMock(),message=SimpleNamespace(answer=AsyncMock(return_value=status)))
         await on_download(call,AppCB(action='download',app_id=app.id),session)
         fetch.assert_awaited_once_with('https://steamrip.com/qa-game/');extract.assert_awaited_once()
-        assert 'https://dl.buzzheavier.com/test' in status.edit_text.call_args.args[0]
+        assert 'https://dl.buzzheavier.com/test' in call.message.answer.call_args.args[0]
 
 
 def test_logs_redact_tokens_file_urls_and_db_credentials():

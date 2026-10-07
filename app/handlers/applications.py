@@ -27,7 +27,6 @@ from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB, MainMenuCB
 from app.utils.helpers import paginate
 from app.utils.text import download_link_block, escape_html
 from database import repositories as repo
-from integrations.steamrip_extractor import extract_bzzhr_direct_link, fetch_game_data
 
 logger = logging.getLogger(__name__)
 
@@ -133,115 +132,8 @@ async def on_open_app(
 async def on_download(
     call: CallbackQuery, callback_data: AppCB, session: AsyncSession
 ) -> None:
-    app = await repo.get_active_application(session, callback_data.app_id)
-    if app is None:
-        await call.answer("❌ التطبيق غير متوفر.", show_alert=True)
-        return
-
-    await call.answer("⏳ جاري تجهيز رابط التحميل...")
-
-    url: str | None = None
-    status_msg = None
-
-    # All Telegram-backed apps use the stable website download contract.
-    source = await repo.get_delivery_source(session, app.id)
-    if source:
-        from app.utils.website import website_download_url
-        url = website_download_url(app.id)
-        if not url:
-            await call.message.answer("❌ إعداد رابط الموقع غير صالح.")
-            return
-        await call.message.answer("🌐 حمّل من Waleed Zone:\n" + download_link_block(url))
-        return
-
-    # رابط مخصص محفوظ من الإدارة له الأولوية.
-    if app.shrankme_url:
-        url = app.shrankme_url
-
-    # ألعاب SteamRIP: نولّد الرابط المباشر لحظياً عند كل ضغطة.
-    elif app.devupload_url and "steamrip.com" in app.devupload_url.lower():
-        status_msg = await call.message.answer(
-            "🔎 جاري البحث عن سيرفر BZZHR وتجهيز رابط التحميل المباشر..."
-        )
-        try:
-            game_data = await fetch_game_data(app.devupload_url)
-            servers = game_data.get("servers", {})
-
-            bzzhr_url = next(
-                (
-                    server_url
-                    for server_name, server_url in servers.items()
-                    if (
-                        "bzzhr" in server_name.lower()
-                        or "buzzheavier" in server_name.lower()
-                        or "bzzhr" in server_url.lower()
-                        or "buzzheavier" in server_url.lower()
-                    )
-                ),
-                None,
-            )
-
-            if not bzzhr_url:
-                await status_msg.edit_text(
-                    "❌ لم يتم العثور على سيرفر BZZHR / Buzzheavier لهذه اللعبة."
-                )
-                return
-
-            url = await extract_bzzhr_direct_link(
-                bzzhr_url,
-                source_page_url=app.devupload_url,
-            )
-
-            if not url:
-                await status_msg.edit_text(
-                    "❌ تم العثور على BZZHR، لكن تعذر توليد رابط التحميل المباشر."
-                )
-                return
-
-        except Exception:
-            logger.exception(
-                "SteamRIP direct download failed: %s",
-                app.devupload_url,
-            )
-            await status_msg.edit_text(
-                "❌ حدث خطأ أثناء تجهيز رابط التحميل المباشر."
-            )
-            return
-
-    # التطبيقات العادية تبقى على السلوك السابق.
-    else:
-        url = app.devupload_url
-
-    if not url:
-        if status_msg:
-            await status_msg.edit_text("⚠️ لا يوجد رابط تحميل لهذا التطبيق.")
-        else:
-            await call.message.answer("⚠️ لا يوجد رابط تحميل لهذا التطبيق.")
-        return
-
-    await repo.increment_downloads(session, app.id)
-    await repo.add_download(session, call.from_user.id, app.id)
-
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🏠 القائمة",
-                    callback_data=MainMenuCB(action="main").pack(),
-                )
-            ],
-        ]
-    )
-    text = (
-        f"⬇️ رابط تحميل {escape_html(app.name)}\n\n"
-        "✅ الرابط المباشر جاهز.\n\n"
-        + download_link_block(url)
-    )
-
-    if status_msg:
-        await status_msg.edit_text(text, reply_markup=kb)
-    else:
-        await call.message.answer(text, reply_markup=kb)
+    from app.services.download_service import send_application_download
+    await send_application_download(call, session, callback_data.app_id)
 
 
 @router.callback_query(AppCB.filter(F.action.in_({"fav", "unfav"})))

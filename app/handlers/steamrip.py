@@ -31,7 +31,7 @@ from app.utils.text import download_link_block
 from config import get_settings
 from database import repositories as repo
 from integrations.imgbb import ImgBBUploader
-from integrations.steamrip_extractor import extract_bzzhr_direct_link, fetch_game_data
+from integrations.steamrip_extractor import fetch_game_data
 
 logger = logging.getLogger(__name__)
 
@@ -144,9 +144,9 @@ async def _prepare_rip_flow(
     try:
         game = await fetch_game_data(page_url)
     except Exception as exc:
-        logger.exception("RIP source fetch failed: %s", page_url)
+        logger.warning("RIP source fetch unavailable")
         await status_msg.edit_text(
-            f"❌ فشل جلب بيانات اللعبة من SteamRIP:\n{escape_html(str(exc))}"
+            "❌ تعذر جلب بيانات اللعبة من SteamRIP. أعد المحاولة بعد قليل."
         )
         await state.clear()
         return
@@ -351,87 +351,12 @@ async def _publish_to_channel(call: CallbackQuery, app) -> None:
 
 @router.callback_query(F.data.startswith("rip_dl:") | F.data.startswith("rip_refresh:"))
 async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> None:
-    app_id = int(call.data.split(":")[1])
-    app = await repo.get_active_application(session, app_id)
-    if not app:
-        await call.answer("❌ لم يتم العثور على اللعبة.", show_alert=True)
+    value = (call.data or "").split(":")
+    if len(value) != 2 or not value[1].isascii() or not value[1].isdigit() or not 0 < int(value[1]) <= 2147483647:
+        await call.answer("طلب غير صالح.", show_alert=True)
         return
-
-    if app.shrankme_url:
-        markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
-            ]
-        )
-        await call.message.edit_text(
-            f"🎮 {escape_html(app.name)}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "✅ تم تجهيز الرابط المباشر للعبة.\n\n"
-            + download_link_block(app.shrankme_url, title="تحميل اللعبة"),
-            reply_markup=markup,
-        )
-        return
-
-    if not app.devupload_url:
-        await call.answer("❌ لم يتم العثور على رابط المصدر.", show_alert=True)
-        return
-
-    await call.message.edit_text("⏳ جاري البحث عن سيرفر BZZHR وسحب الرابط المباشر...")
-
-    try:
-        game_data = await fetch_game_data(app.devupload_url)
-        servers = game_data.get("servers", {})
-        if not servers:
-            await call.message.edit_text("⚠️ السيرفرات قيد التحديث في المصدر حالياً، يرجى إعادة المحاولة بعد قليل.")
-            return
-
-        bzzhr_url = next(
-            (
-                url
-                for name, url in servers.items()
-                if (
-                    "bzzhr" in name.lower()
-                    or "buzzheavier" in name.lower()
-                    or "bzzhr" in url.lower()
-                    or "buzzheavier" in url.lower()
-                )
-            ),
-            None,
-        )
-
-        if bzzhr_url:
-            direct_link = await extract_bzzhr_direct_link(
-                bzzhr_url,
-                source_page_url=app.devupload_url,
-            )
-            if direct_link:
-                markup = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
-                    ]
-                )
-                await call.message.edit_text(
-                    f"🎮 {escape_html(app.name)}\n"
-                    f"💾 الحجم: {escape_html(app.size or game_data.get('size') or '—')}\n"
-                    "━━━━━━━━━━━━━━━━━━━\n"
-                    "✅ تم العثور على الرابط المباشر من BZZHR بنجاح.\n\n"
-                    + download_link_block(direct_link, title="تحميل اللعبة"),
-                    reply_markup=markup,
-                )
-                return
-
-            await call.message.edit_text(
-                "❌ تعذر استخراج الرابط المباشر من صفحة BZZHR.",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")]]
-                ),
-            )
-            return
-
-        await call.message.edit_text(f"⚠️ سيرفر BZZHR غير متوفر للعبة {escape_html(app.name)}.")
-    except Exception as exc:
-        logger.exception("Live scrape failed")
-        await call.message.edit_text(f"❌ تعذر جلب الروابط:\n{escape_html(str(exc))}")
+    from app.services.download_service import send_application_download
+    await send_application_download(call, session, int(value[1]), edit=True)
 
 
 @router.callback_query(F.data.startswith("add_custom_link:"))
@@ -463,7 +388,10 @@ async def on_custom_link_received(
         return
 
     new_link = (message.text or "").strip()
-    if not new_link.startswith(("http://", "https://")):
+    from app.services.download_service import manual_url
+    try:
+        new_link = manual_url(new_link)
+    except ValueError:
         await message.reply("❌ أرسل رابطاً صحيحاً.", reply_markup=cancel_keyboard())
         return
 
