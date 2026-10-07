@@ -35,7 +35,7 @@ CI exposed a missing runtime dependency when SQLAlchemy 2.1 is freshly installed
 
 ## Validation and limitations
 
-Complete local pytest: **182 passed** after the transaction, footer, provider and publication changes. Security-helper Ruff check and Python compilation also passed locally. The local pip-audit package could not be obtained from the available index; dependency audit remains a required CI gate. Python compilation is included in repository CI. CI also runs the existing security-helper lint and production dependency audit.
+Complete local pytest: **182 passed** after the transaction, footer, provider and publication changes. Security-helper Ruff check and Python compilation also passed locally. The local pip-audit package could not be obtained from the available index; dependency audit subsequently passed in GitHub CI. Python compilation is included in repository CI. GitHub CI run https://github.com/waleednjlaty/Waleed-Zone-bot/actions/runs/37652022217 passed tests, compilation, security-helper lint and production dependency audit on code commit `288de0d4aec7e61db94d6af449c2cb4b2b908009`. Companion Website PR: https://github.com/waleednjlaty/Waleed-zone-wab/pull/54.
 
 The website has matching provider fixtures, exact 20-second grant tests, source-race/replay tests, and a real native POST/303 mocked-provider browser journey. See the website's `docs/FINAL_DOWNLOAD_PROCESSING_REPORT.md` for its additive migration and release steps. Bot operation does not run that migration automatically.
 
