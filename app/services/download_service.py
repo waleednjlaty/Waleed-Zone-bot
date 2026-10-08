@@ -6,6 +6,7 @@ before using the result. No signed destination is stored in the catalog.
 from __future__ import annotations
 
 import asyncio
+import re
 from urllib.parse import urlsplit
 
 from sqlalchemy import select
@@ -16,7 +17,7 @@ from database.models import Application
 from database import repositories as repo
 from app.utils.website import website_download_url
 from integrations.public_http import public_url
-from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link, _is_bzzhr_url
+from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link, _is_bzzhr_url, ProviderResolutionError
 
 _ACTIVE: set[tuple[int, int]] = set()
 
@@ -25,6 +26,11 @@ def manual_url(value: str, hosts: set[str] | None = None) -> str:
     if len(value) > 2000 or any(c.isspace() for c in value):
         raise ValueError("INVALID_SOURCE")
     hosts = hosts if hosts is not None else {h.strip().lower() for h in get_settings().LEGACY_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()}
+    if _is_bzzhr_url(value):
+        parsed = urlsplit(value)
+        if not re.fullmatch(r"/[A-Za-z0-9_-]+/?", parsed.path) or parsed.query:
+            raise ValueError("INVALID_SOURCE")
+        return value
     public_url(value, hosts)
     if urlsplit(value).netloc != urlsplit(value).hostname:
         raise ValueError("INVALID_SOURCE")
@@ -45,16 +51,33 @@ async def resolve_application_download(session: AsyncSession, application_id: in
         return app, url, "telegram"
     custom, original = app.shrankme_url, app.devupload_url
     await session.commit()  # No transaction (including middleware reads) across HTTP.
-    if custom:
+    direct_source = custom if custom and _is_bzzhr_url(custom) else original if not custom and original and _is_bzzhr_url(original) else None
+    if direct_source:
+        url = await extract_bzzhr_direct_link(direct_source, strict=True)
+        if not url:
+            raise ValueError("PROVIDER_UNAVAILABLE")
+        provider = "bzzhr"
+    elif custom:
         url, provider = manual_url(custom), "external"
     elif original and urlsplit(original).hostname in {"steamrip.com", "www.steamrip.com"}:
         public_url(original, {"steamrip.com", "www.steamrip.com"})
         async with asyncio.timeout(30):
             data = await fetch_game_data(original)
-            bzzhr = next((u for u in data.get("servers", {}).values() if _is_bzzhr_url(u)), None)
-            if not bzzhr:
+            candidates = list(dict.fromkeys(u for u in data.get("servers", {}).values() if _is_bzzhr_url(u)))[:3]
+            if not candidates:
                 raise ValueError("BZZHR_NOT_FOUND")
-            url = await extract_bzzhr_direct_link(bzzhr, source_page_url=original)
+            url, failure = None, None
+            for bzzhr in candidates:
+                try:
+                    url = await extract_bzzhr_direct_link(bzzhr, source_page_url=original, strict=True)
+                    if url:
+                        break
+                except ProviderResolutionError as error:
+                    failure = error
+                    if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED"}:
+                        raise
+            if not url and failure:
+                raise failure
         if not url:
             raise ValueError("PROVIDER_UNAVAILABLE")
         provider = "bzzhr"
@@ -93,6 +116,18 @@ async def send_application_download(call, session: AsyncSession, application_id:
             await call.message.edit_text(text, reply_markup=None)
         else:
             await call.message.answer(text)
+    except ProviderResolutionError as error:
+        await session.rollback()
+        import logging
+        logging.getLogger(__name__).warning("download failed application_id=%s stage=%s host=%s status=%s category=%s",
+            application_id, error.stage, error.host, error.status, error.code)
+        messages = {
+            "PROVIDER_CHALLENGE": "المصدر يطلب تحققًا بشريًا. افتح صفحة التحميل في Waleed Zone لإكماله يدويًا؛ جلسة متصفحك منفصلة عن جلسة الخادم.",
+            "SOURCE_REMOVED": "ملف المصدر محذوف أو لم يعد متاحًا.",
+            "MISSING_HX_REDIRECT": "المصدر لم يُرجع رابط الملف بعد طلب التنزيل.",
+            "FINAL_DESTINATION_NOT_FILE": "خادم المصدر أعاد صفحة بدل ملف قابل للتنزيل.",
+        }
+        await call.message.answer(messages.get(error.code, "تعذر تجهيز مصدر التحميل. أعد المحاولة لاحقًا.") + "\n" + (website_download_url(application_id) or ""))
     except (ValueError, TimeoutError):
         await session.rollback()
         await call.message.answer("تعذر تجهيز الرابط حاليًا. قد يكون المصدر تغيّر أو يحتاج تحققًا بشريًا؛ أعد المحاولة بعد قليل.")

@@ -53,7 +53,7 @@ def test_direct_header_host_policy_fail_closed(url):
 
 async def test_http_only_resolver_deduplicates_and_caps(monkeypatch):
     extractor._BZZHR_INFLIGHT.clear()
-    monkeypatch.setattr(extractor, '_BZZHR_BACKOFF_UNTIL', 0)
+    extractor._BZZHR_BACKOFF.clear()
     gate = asyncio.Event()
     calls = []
     async def resolve(url, referer):

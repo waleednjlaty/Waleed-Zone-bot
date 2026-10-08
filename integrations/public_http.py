@@ -10,9 +10,31 @@ import asyncio
 import ipaddress
 import socket
 import unicodedata
+from copy import copy
+from http.cookies import SimpleCookie
 from urllib.parse import urljoin, urlsplit
 
 import aiohttp
+
+
+class ExactHostCookieJar(aiohttp.CookieJar):
+    """Never forward provider cookies to a sibling mirror/CDN hostname."""
+    def update_cookies(self, cookies, response_url=None):
+        if response_url is None:
+            return
+        parsed = SimpleCookie()
+        if isinstance(cookies, str):
+            parsed.load(cookies)
+        else:
+            for name, value in cookies.items():
+                parsed[name] = value
+        for name, value in parsed.items():
+            domain = value["domain"].lstrip(".").lower()
+            if domain and domain != response_url.host:
+                continue
+            morsel = copy(value)
+            morsel["domain"] = ""
+            super().update_cookies({name: morsel}, response_url)
 
 
 def public_url(value: str, allowed_hosts: set[str] | None = None) -> str:
@@ -95,22 +117,25 @@ async def fetch_public_response(
     follow=True,
     raise_status=True,
     method="GET",
+    headers_only=False,
+    cookie_jar=None,
 ):
-    if method not in {"GET", "HEAD"}:
-        raise ValueError("INVALID_METHOD")
     connector = aiohttp.TCPConnector(resolver=PublicResolver(), use_dns_cache=False)
     async with (
         asyncio.timeout(timeout),
         aiohttp.ClientSession(
             connector=connector,
             trust_env=False,
+            cookie_jar=cookie_jar,
             timeout=aiohttp.ClientTimeout(total=timeout, connect=5, sock_connect=5, sock_read=5),
         ) as session,
     ):
         for _ in range(5):
             public_url(url, allowed_hosts)
-            request = session.head if method == "HEAD" else session.get
-            async with request(url, headers=headers, allow_redirects=False) as response:
+            if method not in {"GET", "HEAD"}:
+                raise ValueError("INVALID_HTTP_METHOD")
+            operation = session.head if method == "HEAD" else session.get
+            async with operation(url, headers=headers, allow_redirects=False) as response:
                 if follow and response.status in {301, 302, 303, 307, 308}:
                     location = response.headers.get("Location")
                     if (
@@ -121,27 +146,33 @@ async def fetch_public_response(
                         or "\\" in location
                     ):
                         raise ValueError("INVALID_REDIRECT")
-                    next_url = public_url(urljoin(url, location), allowed_hosts)
-                    if urlsplit(next_url).hostname != urlsplit(url).hostname:
-                        sensitive = {"cookie", "authorization", "referer", "hx-current-url"}
-                        headers = {key: value for key, value in (headers or {}).items()
-                                   if key.lower() not in sensitive}
-                    url = next_url
+                    destination = public_url(urljoin(url, location), allowed_hosts)
+                    if urlsplit(destination).hostname != urlsplit(url).hostname and headers:
+                        headers = {
+                            k: v for k, v in headers.items()
+                            if k.lower() not in {
+                                "cookie", "authorization", "referer", "hx-current-url"
+                            }
+                        }
+                    url = destination
                     continue
                 if raise_status:
                     response.raise_for_status()
-                if method == "HEAD":
-                    content_type = response.headers.get("Content-Type", "").split(";", 1)[0]
-                    return (b"", content_type, str(response.url),
-                            dict(response.headers), response.status)
-                if response.headers.get("HX-Redirect") or response.status in {
+                response_headers = dict(response.headers)
+                if (hasattr(response.headers, "getall")
+                        and response.headers.getall("Set-Cookie", [])):
+                    response_headers["Set-Cookie"] = response.headers.getall("Set-Cookie")
+                if headers_only or response.headers.get("HX-Redirect") or response.status in {
                     301,
                     302,
                     303,
                     307,
                     308,
                 }:
-                    return b"", "", str(response.url), dict(response.headers), response.status
+                    return (
+                        b"", response.headers.get("Content-Type", ""), str(response.url),
+                        response_headers, response.status,
+                    )
                 content_type = response.headers.get("Content-Type", "").split(";", 1)[0]
                 if image and content_type not in {
                     "image/jpeg",
@@ -162,7 +193,7 @@ async def fetch_public_response(
                     bytes(body),
                     content_type,
                     str(response.url),
-                    dict(response.headers),
+                    response_headers,
                     response.status,
                 )
     raise ValueError("TOO_MANY_REDIRECTS")

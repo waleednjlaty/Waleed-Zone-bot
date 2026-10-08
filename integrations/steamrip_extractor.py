@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
-from integrations.public_http import fetch_public_bytes, fetch_public_response, public_url
+from integrations.public_http import ExactHostCookieJar, fetch_public_response, public_url
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,8 @@ BZZHR_MIRRORS = (
 
 # Only two public HTTP resolutions per instance; no browser or challenge solver.
 _BZZHR_INFLIGHT: dict[str, asyncio.Task] = {}
-_BZZHR_BACKOFF_UNTIL = 0.0
-BZZHR_FILE_HOSTS = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS} | {"fafda.to", "ts.buzzheavier.com"}
+_BZZHR_BACKOFF: dict[str, float] = {}
+BZZHR_FILE_HOSTS = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS} | {"fafda.to", "ts.bzzhr.co", "ts.buzzheavier.com"}
 
 
 def _normalize_url(url: str, base_url: str | None = None) -> str:
@@ -288,15 +288,10 @@ def _looks_like_direct_download(url: str) -> bool:
 def _looks_like_cloudflare_challenge(status: int, html: str) -> bool:
     """ميّز التحقق البشري لإغلاق المعالجة بأمان."""
     body = (html or "").lower()
-    markers = (
-        "cf-chl-",
-        "challenge-platform",
-        "cf-turnstile",
-        "just a moment",
-        "verify you are human",
-        "cloudflare ray id",
-    )
-    return status in {403, 429, 503} and any(marker in body for marker in markers)
+    return (any(marker in body for marker in ("cf-chl-", "/cdn-cgi/challenge-platform/"))
+            or bool(re.search(r"<title[^>]*>\s*(just a moment|attention required)", body))
+            or bool(re.search(r"<(?:div|form)[^>]+(?:class|id)=[\"\'][^\"\']*cf-turnstile", body))
+            or status not in {200, 204, 206} and "verify you are human" in body)
 
 
 def _identify_server(url: str, text: str) -> str:
@@ -308,48 +303,41 @@ def _identify_server(url: str, text: str) -> str:
 
 
 def _bzzhr_candidates(url: str) -> list[str]:
-    """جرّب نفس file-id على المرايا الرسمية بدون افتراض id ثابت."""
-    normalized = _normalize_url(url)
-    if not _is_bzzhr_url(normalized):
+    """Use the advertised host only: live mirrors do not necessarily share file IDs."""
+    if not _is_bzzhr_url(url):
         return []
-    parsed = urlsplit(normalized)
+    parsed = urlsplit(url)
+    return [url] if (re.fullmatch(r"/[A-Za-z0-9_-]+/?", parsed.path)
+                    and not parsed.query) else []
 
-    original_host = (parsed.hostname or "").lower()
-    if not _host_matches_bzzhr(original_host):
-        return []
 
-    hosts: list[str] = []
-    if original_host:
-        hosts.append(original_host)
-
-    for host in BZZHR_MIRRORS:
-        if host not in hosts:
-            hosts.append(host)
-
-    return [
-        urlunsplit(("https", host, parsed.path, parsed.query, ""))
-        for host in hosts
-    ]
+def _extract_signed_download_endpoints(html: str, page_url: str) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    base = urlsplit(page_url)
+    resource = base.path.rstrip("/")
+    endpoints = []
+    for element in soup.select('a[hx-get], button[hx-get], a[data-hx-get], button[data-hx-get]'):
+        raw = element.get("hx-get") or element.get("data-hx-get") or ""
+        if len(raw) > 4096 or any(c.isspace() or unicodedata.category(c) in {"Cc", "Cf"} for c in raw):
+            continue
+        endpoint = urljoin(page_url, raw)
+        if not _is_bzzhr_url(endpoint):
+            continue
+        parsed = urlsplit(endpoint)
+        if (parsed.hostname != base.hostname or not parsed.path.startswith(resource + "/")
+                or re.search(r"/(preview|delete|remove|login|account)(/|$)", parsed.path, re.I)
+                or any(unicodedata.category(c) in {"Cc", "Cf"} or c == "\\" for c in unquote(parsed.path + parsed.query))):
+            continue
+        if endpoint not in endpoints:
+            endpoints.append(endpoint)
+        if len(endpoints) >= 3:
+            break
+    return endpoints
 
 
 def _extract_signed_download_endpoint(html: str, page_url: str) -> str | None:
-    """استخرج hx-get الحقيقي؛ لا نخترع /download لأنه يحتاج token موقّع."""
-    soup = BeautifulSoup(html, "html.parser")
-
-    for element in soup.select('[hx-get]'):
-        hx_get = (element.get("hx-get") or "").strip()
-        if not hx_get or any(c.isspace() or ord(c) < 32 for c in hx_get):
-            continue
-
-        endpoint = _normalize_url(hx_get, page_url)
-        base, parsed = urlsplit(page_url), urlsplit(endpoint)
-        file_id = base.path.strip('/').split('/')[0]
-        if (_is_bzzhr_url(endpoint) and parsed.hostname == base.hostname
-                and file_id and parsed.path.startswith('/' + file_id + '/')
-                and not re.search(r'/(preview|delete|remove|login|account)(/|$)', parsed.path, re.I)):
-            return endpoint
-
-    return None
+    endpoints = _extract_signed_download_endpoints(html, page_url)
+    return endpoints[0] if endpoints else None
 
 
 def _direct_link_from_headers(
@@ -395,9 +383,10 @@ async def fetch_game_data(page_url: str) -> dict:
     if not _is_steamrip_url(page_url):
         raise ValueError("الرابط يجب أن يكون من steamrip.com")
 
-    payload, _, final_page_url = await fetch_public_bytes(page_url,
-        allowed_hosts={'steamrip.com','www.steamrip.com'},headers=BROWSER_HEADERS)
+    payload, _, final_page_url, headers, status = await _fetch_provider(page_url,'steamrip_page',page_url,
+        allowed_hosts={'steamrip.com','www.steamrip.com'},headers=BROWSER_HEADERS,raise_status=False)
     page_text=payload.decode('utf-8','replace')
+    _require_success(status,page_text,headers,'steamrip_page',page_url)
     soup = BeautifulSoup(page_text, "html.parser")
 
     title_el = soup.find("h1", class_="entry-title") or soup.find("h1")
@@ -450,6 +439,8 @@ async def fetch_game_data(page_url: str) -> dict:
         server_name = _identify_server(href, btn_text)
         if server_name not in servers:
             servers[server_name] = href
+        elif _is_bzzhr_url(href) and href not in servers.values():
+            servers[server_name + " " + str(len(servers) + 1)] = href
 
     return {
         "title": title,
@@ -460,84 +451,148 @@ async def fetch_game_data(page_url: str) -> dict:
     }
 
 
+class ProviderResolutionError(ValueError):
+    """Only safe categories/stages: no upstream message, cookie or signature."""
+    def __init__(self, code, stage, source, status=None):
+        super().__init__(code)
+        self.code, self.stage, self.host, self.status = code, stage, urlsplit(source).hostname, status
+
+
+async def _fetch_provider(url, stage, source, **kwargs):
+    try:
+        return await fetch_public_response(url, **kwargs)
+    except (ValueError, TimeoutError, aiohttp.ClientError) as error:
+        code = "PROVIDER_TIMEOUT" if isinstance(error, TimeoutError) else "INVALID_SOURCE" if isinstance(error, ValueError) else "PROVIDER_UNAVAILABLE"
+        raise ProviderResolutionError(code, stage, source) from None
+
+
+def _require_success(status, body, headers, stage, source):
+    if _looks_like_cloudflare_challenge(status, body) or headers.get("cf-mitigated") == "challenge":
+        raise ProviderResolutionError("PROVIDER_CHALLENGE", stage, source, status)
+    if status in {404, 410}:
+        raise ProviderResolutionError("SOURCE_REMOVED", stage, source, status)
+    if status == 429:
+        raise ProviderResolutionError("PROVIDER_RATE_LIMITED", stage, source, status)
+    if status == 401:
+        raise ProviderResolutionError("PROVIDER_LOGIN_REQUIRED", stage, source, status)
+    if status == 403:
+        raise ProviderResolutionError("PROVIDER_FORBIDDEN", stage, source, status)
+    if status not in {200, 204, 206, 301, 302, 303, 307, 308}:
+        raise ProviderResolutionError("PROVIDER_UNAVAILABLE", stage, source, status)
+
+
+async def _validate_file(destination):
+    _, content_type, final, headers, status = await _fetch_provider(
+        destination, 'file_probe', destination, allowed_hosts=BZZHR_FILE_HOSTS, timeout=10, raise_status=False,
+        method="HEAD", headers_only=True,
+    )
+    if status in {405, 501}:
+        _, content_type, final, headers, status = await _fetch_provider(
+            destination, 'file_probe', destination, allowed_hosts=BZZHR_FILE_HOSTS, timeout=10, raise_status=False,
+            headers={"Range": "bytes=0-0"}, headers_only=True,
+        )
+    _require_success(status, "", headers, "file_probe", destination)
+    disposition = headers.get("Content-Disposition") or headers.get("content-disposition") or ""
+    if (not _looks_like_direct_download(final) or status not in {200, 206}
+            or (not disposition.lower().startswith("attachment") and not content_type)
+            or content_type.split(";", 1)[0].lower() in {"text/html", "application/xhtml+xml", "application/json"}):
+        raise ProviderResolutionError("FINAL_DESTINATION_NOT_FILE", "file_probe", destination, status)
+    return final
+
+
 async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | None = None) -> str | None:
     hosts = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS}
     public_url(candidate_url, hosts)
     headers = dict(HEADERS)
     if _source_referer(source_page_url):
         headers["Referer"] = source_page_url
-    body, _, page_url, page_headers, status = await fetch_public_response(
-        candidate_url, allowed_hosts=hosts, headers=headers, max_bytes=1024 * 1024,
-        timeout=10, raise_status=False,
+    jar = ExactHostCookieJar()
+    body, _, page_url, page_headers, status = await _fetch_provider(
+        candidate_url, 'bzzhr_page', candidate_url, allowed_hosts=hosts, headers=headers, max_bytes=1024 * 1024,
+        timeout=10, raise_status=False, cookie_jar=jar,
     )
     html = body.decode("utf-8", "replace")
-    if status != 200 or _looks_like_cloudflare_challenge(status, html):
-        return None
-    endpoint = _extract_signed_download_endpoint(html, page_url)
-    if not endpoint or urlsplit(endpoint).hostname != urlsplit(page_url).hostname:
-        return None
-    base = urlsplit(page_url)
-    parsed = urlsplit(endpoint)
-    if not parsed.path.startswith(base.path.rstrip("/") + "/") or re.search(r"/(preview|delete|remove|login|account)(/|$)", parsed.path, re.I):
-        return None
+    _require_success(status, html, page_headers, "bzzhr_page", page_url)
+    endpoints = _extract_signed_download_endpoints(html, page_url)
+    if not endpoints:
+        raise ProviderResolutionError("MISSING_DOWNLOAD_ACTION", "bzzhr_page", page_url, status)
+    # Preserve mocked transports and multiple Set-Cookie headers too.
     from http.cookies import SimpleCookie
     cookies = SimpleCookie()
-    cookies.load(page_headers.get("Set-Cookie") or page_headers.get("set-cookie") or "")
-    cookie_header = "; ".join(f"{key}={value.value}" for key, value in cookies.items())
+    raw_cookies = page_headers.get("Set-Cookie") or page_headers.get("set-cookie") or []
+    for raw in ([raw_cookies] if isinstance(raw_cookies, str) else raw_cookies):
+        cookies.load(raw)
+    cookie_header = "; ".join(f"{key}={value.value}" for key, value in cookies.items()
+        if not value["domain"] or value["domain"].lstrip(".").lower() == urlsplit(page_url).hostname)
     if len(cookie_header) > 2048 or any(ord(c) < 32 for c in cookie_header):
-        return None
-    _, _, _, response_headers, status = await fetch_public_response(
-        endpoint, allowed_hosts=hosts,
-        headers={"HX-Request": "true", "HX-Current-URL": page_url, "Referer": page_url,
-                 **({"Cookie": cookie_header} if cookie_header else {})},
-        max_bytes=64 * 1024, timeout=10, follow=False, raise_status=False,
-    )
-    if status not in {200, 204, 301, 302, 303, 307, 308}:
-        return None
-    direct = _direct_link_from_headers(response_headers, endpoint)
-    if direct:
-        _, content_type, _, _, final_status = await fetch_public_response(
-            direct, allowed_hosts=BZZHR_FILE_HOSTS, method='HEAD', timeout=10,
-            raise_status=False,
-        )
-        if final_status not in {200, 204} or not content_type or content_type in {
-            'text/html', 'application/xhtml+xml', 'application/json'
-        }:
-            return None
-    return direct
+        raise ProviderResolutionError("INVALID_PROVIDER_RESPONSE", "bzzhr_page", page_url)
+    failure = None
+    for endpoint in endpoints:
+        try:
+            path = urlsplit(endpoint).path
+            scoped_cookie = "; ".join(f"{key}={value.value}" for key, value in cookies.items()
+                if (not value["domain"] or value["domain"].lstrip(".").lower() == urlsplit(page_url).hostname)
+                and (not value["path"] or path == value["path"] or path.startswith(value["path"].rstrip("/") + "/")))
+            payload, _, _, response_headers, status = await _fetch_provider(
+                endpoint, 'bzzhr_handoff', page_url, allowed_hosts=hosts,
+                headers={"HX-Request": "true", "HX-Current-URL": page_url, "Referer": page_url,
+                         **({"Cookie": scoped_cookie} if scoped_cookie else {})},
+                max_bytes=64 * 1024, timeout=10, follow=False, raise_status=False, cookie_jar=jar,
+            )
+            _require_success(status, payload.decode("utf-8", "replace"), response_headers, "bzzhr_handoff", page_url)
+            direct = _direct_link_from_headers(response_headers, endpoint)
+            if not direct:
+                raise ProviderResolutionError("MISSING_HX_REDIRECT", "bzzhr_handoff", page_url, status)
+            return await _validate_file(direct)
+        except ProviderResolutionError as error:
+            failure = error
+            if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED"}:
+                raise
+    if failure:
+        raise failure
+    return None
 
 
-async def extract_bzzhr_direct_link(bzzhr_url: str, source_page_url: str | None = None) -> str | None:
-    """Fresh bounded HTTP only. Challenges fail closed; never cache completed signed URLs."""
-    global _BZZHR_BACKOFF_UNTIL
+async def extract_bzzhr_direct_link(bzzhr_url: str, source_page_url: str | None = None, *, strict=False) -> str | None:
+    """Fresh bounded HTTP only. Optional strict mode exposes safe failure diagnostics."""
     candidates = _bzzhr_candidates(bzzhr_url)
     if not candidates:
         return None
     key = candidates[0]
-    if key in _BZZHR_INFLIGHT:
-        return await asyncio.shield(_BZZHR_INFLIGHT[key])
-    if len(_BZZHR_INFLIGHT) >= 2 or asyncio.get_running_loop().time() < _BZZHR_BACKOFF_UNTIL:
-        return None
 
     async def resolve():
-        global _BZZHR_BACKOFF_UNTIL
         try:
             async with asyncio.timeout(25):
-                for candidate in candidates:
-                    try:
-                        direct = await _resolve_candidate_fast(candidate, source_page_url)
-                        if direct:
-                            return direct
-                    except (ValueError, TimeoutError, aiohttp.ClientError):
-                        logger.warning("BZZHR public HTTP unavailable host=%s", urlsplit(candidate).hostname)
-            _BZZHR_BACKOFF_UNTIL = asyncio.get_running_loop().time() + 10
-            return None
-        except TimeoutError:
-            _BZZHR_BACKOFF_UNTIL = asyncio.get_running_loop().time() + 10
-            return None
+                return await _resolve_candidate_fast(key, source_page_url)
+        except ProviderResolutionError as error:
+            _BZZHR_BACKOFF[key] = asyncio.get_running_loop().time() + 10
+            logger.warning("BZZHR failed stage=%s host=%s status=%s category=%s",
+                error.stage, error.host, error.status, error.code)
+            raise
+        except (ValueError, TimeoutError, aiohttp.ClientError) as error:
+            _BZZHR_BACKOFF[key] = asyncio.get_running_loop().time() + 10
+            category = "PROVIDER_TIMEOUT" if isinstance(error, TimeoutError) else "PROVIDER_UNAVAILABLE"
+            raise ProviderResolutionError(category, "bzzhr_page", key) from None
         finally:
             _BZZHR_INFLIGHT.pop(key, None)
 
-    task = asyncio.create_task(resolve())
-    _BZZHR_INFLIGHT[key] = task
-    return await asyncio.shield(task)
+    task = _BZZHR_INFLIGHT.get(key)
+    if task is None:
+        now = asyncio.get_running_loop().time()
+        for source, expiry in list(_BZZHR_BACKOFF.items()):
+            if expiry <= now:
+                _BZZHR_BACKOFF.pop(source, None)
+        if len(_BZZHR_BACKOFF) >= 32 and key not in _BZZHR_BACKOFF:
+            _BZZHR_BACKOFF.pop(next(iter(_BZZHR_BACKOFF)))
+        if len(_BZZHR_INFLIGHT) >= 2 or now < _BZZHR_BACKOFF.get(key, 0):
+            if strict:
+                raise ProviderResolutionError("PROVIDER_BUSY", "bzzhr_page", key)
+            return None
+        task = asyncio.create_task(resolve())
+        _BZZHR_INFLIGHT[key] = task
+    try:
+        return await asyncio.shield(task)
+    except ProviderResolutionError:
+        if strict:
+            raise
+        return None
