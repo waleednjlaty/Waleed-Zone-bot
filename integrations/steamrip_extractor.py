@@ -7,6 +7,7 @@ import unicodedata
 import logging
 import aiohttp
 import re
+from yarl import URL
 from collections.abc import Mapping
 from urllib.parse import parse_qs, unquote, urljoin, urlsplit, urlunsplit
 
@@ -516,23 +517,20 @@ async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | Non
     endpoints = _extract_signed_download_endpoints(html, page_url)
     if not endpoints:
         raise ProviderResolutionError("MISSING_DOWNLOAD_ACTION", "bzzhr_page", page_url, status)
-    # Preserve mocked transports and multiple Set-Cookie headers too.
+    # Normalize response cookies through the same host-only jar, including expiry/deletion.
     from http.cookies import SimpleCookie
-    cookies = SimpleCookie()
     raw_cookies = page_headers.get("Set-Cookie") or page_headers.get("set-cookie") or []
     for raw in ([raw_cookies] if isinstance(raw_cookies, str) else raw_cookies):
+        cookies = SimpleCookie()
         cookies.load(raw)
-    cookie_header = "; ".join(f"{key}={value.value}" for key, value in cookies.items()
-        if not value["domain"] or value["domain"].lstrip(".").lower() == urlsplit(page_url).hostname)
-    if len(cookie_header) > 2048 or any(ord(c) < 32 for c in cookie_header):
-        raise ProviderResolutionError("INVALID_PROVIDER_RESPONSE", "bzzhr_page", page_url)
+        jar.update_cookies(cookies, URL(page_url))
     failure = None
     for endpoint in endpoints:
         try:
-            path = urlsplit(endpoint).path
-            scoped_cookie = "; ".join(f"{key}={value.value}" for key, value in cookies.items()
-                if (not value["domain"] or value["domain"].lstrip(".").lower() == urlsplit(page_url).hostname)
-                and (not value["path"] or path == value["path"] or path.startswith(value["path"].rstrip("/") + "/")))
+            session = jar.filter_cookies(URL(endpoint))
+            scoped_cookie = "; ".join(f"{key}={value.value}" for key, value in session.items())
+            if len(scoped_cookie) > 2048 or any(ord(c) < 32 for c in scoped_cookie):
+                raise ProviderResolutionError("INVALID_PROVIDER_RESPONSE", "bzzhr_handoff", page_url)
             payload, _, _, response_headers, status = await _fetch_provider(
                 endpoint, 'bzzhr_handoff', page_url, allowed_hosts=hosts,
                 headers={"HX-Request": "true", "HX-Current-URL": page_url, "Referer": page_url,
@@ -546,7 +544,7 @@ async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | Non
             return await _validate_file(direct)
         except ProviderResolutionError as error:
             failure = error
-            if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED"}:
+            if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED", "PROVIDER_RATE_LIMITED"}:
                 raise
     if failure:
         raise failure
