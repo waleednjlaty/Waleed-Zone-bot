@@ -357,6 +357,7 @@ def _direct_link_from_headers(
     base_url: str,
 ) -> str | None:
     """اقرأ HX-Redirect/Location وتأكد أنه رابط ملف مباشر موقّع."""
+    headers = {key.lower(): value for key, value in headers.items()}
     raw = (
         headers.get("HX-Redirect")
         or headers.get("hx-redirect")
@@ -479,7 +480,8 @@ async def _fetch_provider(url, stage, source, **kwargs):
 
 
 def _require_success(status, body, headers, stage, source):
-    if _looks_like_cloudflare_challenge(status, body) or headers.get("cf-mitigated") == "challenge":
+    normalized_headers = {key.lower(): value for key, value in headers.items()}
+    if _looks_like_cloudflare_challenge(status, body) or normalized_headers.get("cf-mitigated", "").lower() == "challenge":
         raise ProviderResolutionError("PROVIDER_CHALLENGE", stage, source, status)
     if status in {404, 410}:
         raise ProviderResolutionError("SOURCE_REMOVED", stage, source, status)
@@ -555,7 +557,7 @@ async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | Non
             return await _validate_file(direct)
         except ProviderResolutionError as error:
             failure = error
-            if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED", "PROVIDER_RATE_LIMITED"}:
+            if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED", "PROVIDER_RATE_LIMITED", "PROVIDER_FORBIDDEN"}:
                 raise
     if failure:
         raise failure

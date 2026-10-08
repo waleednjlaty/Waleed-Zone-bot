@@ -74,7 +74,7 @@ async def resolve_application_download(session: AsyncSession, application_id: in
                         break
                 except ProviderResolutionError as error:
                     failure = error
-                    if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED"}:
+                    if error.code in {"PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED", "PROVIDER_RATE_LIMITED", "PROVIDER_FORBIDDEN"}:
                         raise
             if not url and failure:
                 raise failure
