@@ -31,7 +31,7 @@ from app.utils.text import download_link_block
 from config import get_settings
 from database import repositories as repo
 from integrations.imgbb import ImgBBUploader
-from integrations.steamrip_extractor import extract_bzzhr_direct_link, fetch_game_data
+from integrations.steamrip_extractor import fetch_game_data
 
 logger = logging.getLogger(__name__)
 
@@ -144,9 +144,9 @@ async def _prepare_rip_flow(
     try:
         game = await fetch_game_data(page_url)
     except Exception as exc:
-        logger.exception("RIP source fetch failed: %s", page_url)
+        logger.warning("RIP source fetch unavailable")
         await status_msg.edit_text(
-            f"❌ فشل جلب بيانات اللعبة من SteamRIP:\n{escape_html(str(exc))}"
+            "❌ تعذر جلب بيانات اللعبة من SteamRIP. أعد المحاولة بعد قليل."
         )
         await state.clear()
         return
@@ -258,6 +258,7 @@ async def _ask_publish(message: Message, state: FSMContext) -> None:
 
 
 async def _show_preview(message: Message, state: FSMContext) -> None:
+    from app.utils.text import bounded_html
     data = await state.get_data()
     await state.set_state(SteamRipStates.waiting_confirm)
 
@@ -271,12 +272,12 @@ async def _show_preview(message: Message, state: FSMContext) -> None:
     text = (
         "📋 معاينة لعبة SteamRIP\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        f"🎮 الاسم: {escape_html(data.get('name') or '—')}\n"
-        f"📝 الوصف: {escape_html(data.get('description') or '—')}\n"
-        f"📦 الإصدار: {escape_html(data.get('version') or '—')}\n"
-        f"💾 الحجم: {escape_html(data.get('size') or '—')}\n"
-        f"💻 النظام: {escape_html(data.get('platform') or '—')}\n"
-        f"🗂 التصنيف: {escape_html(data.get('category') or '—')}\n"
+        f"🎮 الاسم: {bounded_html(data.get('name') or '—', 100)}\n"
+        f"📝 الوصف: {bounded_html(data.get('description') or '—', 300)}\n"
+        f"📦 الإصدار: {bounded_html(data.get('version') or '—', 40)}\n"
+        f"💾 الحجم: {bounded_html(data.get('size') or '—', 40)}\n"
+        f"💻 النظام: {bounded_html(data.get('platform') or '—', 40)}\n"
+        f"🗂 التصنيف: {bounded_html(data.get('category') or '—', 50)}\n"
         f"🖼 الصورة: {escape_html(image_label)}\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "🔗 مصدر التحميل: SteamRIP\n"
@@ -306,132 +307,24 @@ async def _show_preview(message: Message, state: FSMContext) -> None:
             await message.answer_photo(photo=photo, caption=text, reply_markup=kb)
             return
         except Exception:
-            logger.debug("Could not render RIP preview image", exc_info=True)
+            logger.debug("RIP preview image unavailable")
 
     await message.answer(text, reply_markup=kb)
 
 
-async def _publish_to_channel(call: CallbackQuery, app) -> None:
-    if not is_admin(call.from_user.id):
-        await call.answer("⛔", show_alert=True)
-        return
-    settings = get_settings()
-    if not settings.CHANNEL_ID:
-        await call.message.answer(
-            "⚠️ لم يتم إعداد CHANNEL_ID؛ تم حفظ التطبيق بدون نشر في القناة."
-        )
-        return
-
-    # Keep SteamRIP's source/extractor semantics, with a stable website CTA.
-    from app.handlers.upload import channel_promo
-    text, keyboard = channel_promo(app)
-
-    photo = app.image_url or app.icon_file_id
-
-    try:
-        if photo:
-            await call.bot.send_photo(
-                settings.CHANNEL_ID,
-                photo=photo,
-                caption=text,
-                reply_markup=keyboard,
-                parse_mode="HTML",
-            )
-        else:
-            await call.bot.send_message(
-                settings.CHANNEL_ID, text, reply_markup=keyboard, parse_mode="HTML",
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
-        app.published = True
-        await call.message.answer("📢 تم نشر اللعبة في القناة بنجاح.")
-    except Exception:
-        logger.exception("SteamRIP channel publish failed")
-        await call.message.answer("❌ تم حفظ اللعبة، لكن فشل النشر في القناة.")
+async def _publish_to_channel(call: CallbackQuery, session: AsyncSession, app) -> None:
+    from app.handlers.upload import _publish_to_channel as publish
+    await publish(call, session, app)
 
 
 @router.callback_query(F.data.startswith("rip_dl:") | F.data.startswith("rip_refresh:"))
 async def on_fetch_live_download(call: CallbackQuery, session: AsyncSession) -> None:
-    app_id = int(call.data.split(":")[1])
-    app = await repo.get_active_application(session, app_id)
-    if not app:
-        await call.answer("❌ لم يتم العثور على اللعبة.", show_alert=True)
+    value = (call.data or "").split(":")
+    if len(value) != 2 or not value[1].isascii() or not value[1].isdigit() or not 0 < int(value[1]) <= 2147483647:
+        await call.answer("طلب غير صالح.", show_alert=True)
         return
-
-    if app.shrankme_url:
-        markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
-            ]
-        )
-        await call.message.edit_text(
-            f"🎮 {escape_html(app.name)}\n"
-            "━━━━━━━━━━━━━━━━━━━\n"
-            "✅ تم تجهيز الرابط المباشر للعبة.\n\n"
-            + download_link_block(app.shrankme_url, title="تحميل اللعبة"),
-            reply_markup=markup,
-        )
-        return
-
-    if not app.devupload_url:
-        await call.answer("❌ لم يتم العثور على رابط المصدر.", show_alert=True)
-        return
-
-    await call.message.edit_text("⏳ جاري البحث عن سيرفر BZZHR وسحب الرابط المباشر...")
-
-    try:
-        game_data = await fetch_game_data(app.devupload_url)
-        servers = game_data.get("servers", {})
-        if not servers:
-            await call.message.edit_text("⚠️ السيرفرات قيد التحديث في المصدر حالياً، يرجى إعادة المحاولة بعد قليل.")
-            return
-
-        bzzhr_url = next(
-            (
-                url
-                for name, url in servers.items()
-                if (
-                    "bzzhr" in name.lower()
-                    or "buzzheavier" in name.lower()
-                    or "bzzhr" in url.lower()
-                    or "buzzheavier" in url.lower()
-                )
-            ),
-            None,
-        )
-
-        if bzzhr_url:
-            direct_link = await extract_bzzhr_direct_link(
-                bzzhr_url,
-                source_page_url=app.devupload_url,
-            )
-            if direct_link:
-                markup = InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")],
-                    ]
-                )
-                await call.message.edit_text(
-                    f"🎮 {escape_html(app.name)}\n"
-                    f"💾 الحجم: {escape_html(app.size or game_data.get('size') or '—')}\n"
-                    "━━━━━━━━━━━━━━━━━━━\n"
-                    "✅ تم العثور على الرابط المباشر من BZZHR بنجاح.\n\n"
-                    + download_link_block(direct_link, title="تحميل اللعبة"),
-                    reply_markup=markup,
-                )
-                return
-
-            await call.message.edit_text(
-                "❌ تعذر استخراج الرابط المباشر من صفحة BZZHR.",
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[[InlineKeyboardButton(text="🔙 رجوع", callback_data=f"app:view:{app_id}")]]
-                ),
-            )
-            return
-
-        await call.message.edit_text(f"⚠️ سيرفر BZZHR غير متوفر للعبة {escape_html(app.name)}.")
-    except Exception as exc:
-        logger.exception("Live scrape failed")
-        await call.message.edit_text(f"❌ تعذر جلب الروابط:\n{escape_html(str(exc))}")
+    from app.services.download_service import send_application_download
+    await send_application_download(call, session, int(value[1]), edit=True)
 
 
 @router.callback_query(F.data.startswith("add_custom_link:"))
@@ -463,7 +356,10 @@ async def on_custom_link_received(
         return
 
     new_link = (message.text or "").strip()
-    if not new_link.startswith(("http://", "https://")):
+    from app.services.download_service import manual_url
+    try:
+        new_link = manual_url(new_link)
+    except ValueError:
         await message.reply("❌ أرسل رابطاً صحيحاً.", reply_markup=cancel_keyboard())
         return
 
@@ -770,23 +666,10 @@ async def on_rip_confirm(
     await call.answer("⏳ جاري حفظ اللعبة وترحيل الصورة...")
 
     try:
-        app = await repo.create_application(
-            session,
-            name=name,
-            description=data.get("description"),
-            version=data.get("version"),
-            size=data.get("size"),
-            category=data.get("category"),
-            platform=data.get("platform"),
-            icon_file_id=data.get("icon_file_id"),
-            image_url=None,
-            devupload_url=source_page_url,
-            shrankme_url=None,
-            search_text=build_search_text(name, data.get("category"), data.get("platform"), data.get("description")),
-        )
-
         hosted_image_url = ""
-        image_name = f"game_{app.id}"
+        from uuid import uuid4
+        image_name = "game_" + uuid4().hex
+        await session.commit()  # End middleware reads before fetching/uploading image bytes.
 
         if image_mode == "site":
             source_image_url = data.get("source_image_url")
@@ -803,17 +686,26 @@ async def on_rip_confirm(
                 raise RuntimeError("صورة Telegram غير موجودة في جلسة الإضافة.")
             hosted_image_url = await imgbb_client.upload_telegram_photo(call.bot, icon_file_id, name=image_name)
 
-        if image_mode in {"site", "telegram"}:
-            if not hosted_image_url:
-                raise RuntimeError(
-                    "فشل ترحيل صورة اللعبة إلى ImgBB. تأكد من IMGBB_API_KEY وأن صورة المصدر متاحة ثم أعد المحاولة."
-                )
-            app.image_url = hosted_image_url
-            await repo.update_application(session, app)
+        if image_mode in {"site", "telegram"} and not hosted_image_url:
+            raise RuntimeError("IMAGE_UPLOAD_UNAVAILABLE")
+        app = await repo.create_application(
+            session,
+            name=name,
+            description=data.get("description"),
+            version=data.get("version"),
+            size=data.get("size"),
+            category=data.get("category"),
+            platform=data.get("platform"),
+            icon_file_id=data.get("icon_file_id"),
+            image_url=hosted_image_url or None,
+            devupload_url=source_page_url,
+            shrankme_url=None,
+            search_text=build_search_text(name, data.get("category"), data.get("platform"), data.get("description")),
+        )
 
         await session.commit()
     except Exception:
-        logger.exception("RIP app creation/image migration failed")
+        logger.warning("RIP app creation/image migration unavailable")
         await session.rollback()
         await call.message.answer(
             "❌ فشل حفظ اللعبة بصورة صحيحة. لم يتم حفظ سجل ناقص.\n\n"
@@ -833,6 +725,6 @@ async def on_rip_confirm(
     )
 
     if data.get("publish_choice") == "yes":
-        await _publish_to_channel(call, app)
+        await _publish_to_channel(call, session, app)
 
     await state.clear()

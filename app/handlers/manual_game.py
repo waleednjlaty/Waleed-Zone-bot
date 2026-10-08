@@ -51,18 +51,10 @@ def _keyboard(rows=None):
 
 def validate_download_link(value: str) -> str:
     """Match the website's legacy delivery URL rules without fetching the file."""
-    hosts = {
-        h.strip() for h in get_settings().LEGACY_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()
-    }
-    if len(value) > 2000 or any(c.isspace() for c in value):
-        raise ValueError("INVALID_DOWNLOAD_LINK")
-    public_url(value, hosts)
-    if urlsplit(value).netloc != urlsplit(value).hostname:
-        raise ValueError("INVALID_DOWNLOAD_LINK")
-    # Source pages on SteamRIP are handled by the separate SteamRIP flow.
+    from app.services.download_service import manual_url
     if urlsplit(value).hostname in {"steamrip.com", "www.steamrip.com"}:
         raise ValueError("USE_STEAMRIP_FLOW")
-    return value
+    return manual_url(value, {h.strip().lower() for h in get_settings().LEGACY_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()})
 
 
 @router.callback_query(AdminCB.filter(F.action == "add_manual_game"))

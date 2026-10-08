@@ -47,7 +47,7 @@ Rollback: before revocation, point both services back to the prior credential an
 | `VISIT_KEY_SALT` | Website; restart | Daily visitor keys change; no logout. |
 | `DOWNLOAD_IP_HASH_KEY` / previous overlap settings | Website; follow existing direct-download key-overlap contract | Can alter network quota identity. Direct remains disabled. Never change ingress verification based on an assumed header. |
 | S3 access/secret keys (`DOWNLOAD_S3_*`, optional storage equivalents) | Website only if ever enabled; provider credential lifecycle | No direct-storage enablement or bucket creation. Existing signed URL lifetime is provider-dependent; key revocation may invalidate issued URLs. |
-| Credential-bearing `BZZHR_PROXY_URL` / `IMGBB_PROXY_URL` | Bot, then provider revocation | Phase 8 refuses unverified BZZHR proxy use because it bypasses DNS pinning. Review actual egress controls before reintroducing a proxy. No new proxy is provisioned. |
+| Credential-bearing `BZZHR_PROXY_URL` / `IMGBB_PROXY_URL` | Bot, then provider revocation | Historical BZZHR proxy settings are unsupported and never used for downloads; do not configure a bypass. Rotate any historical proxy credential separately. No new proxy is provisioned. |
 
 Do not change `OWNER_USER_ID` or `ADMIN_IDS` while rotating secrets. They are authorization configuration, not rotatable signing keys.
 

@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import unicodedata
 import logging
-import os
+import aiohttp
 import re
 from collections.abc import Mapping
-from urllib.parse import parse_qs, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
-from curl_cffi import AsyncSession as CurlAsyncSession
-from curl_cffi import CurlOpt
 
-from integrations.public_http import fetch_public_bytes, public_addresses, public_url
+from integrations.public_http import fetch_public_bytes, fetch_public_response, public_addresses, public_url
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +45,10 @@ BZZHR_MIRRORS = (
     "buzzheavier.com",
 )
 
-BZZHR_BROWSER_TIMEOUT_MS = 30_000
-BZZHR_CLOUDFLARE_TIMEOUT_MS = 45_000
-
-# تشغيل متصفح Chromium واحد في كل مرة حتى لا تنفجر الذاكرة على Railway/Trial.
-_BZZHR_BROWSER_LOCK = asyncio.Lock()
+# Only two public HTTP resolutions per instance; no browser or challenge solver.
+_BZZHR_INFLIGHT: dict[str, asyncio.Task] = {}
+_BZZHR_BACKOFF_UNTIL = 0.0
+BZZHR_FILE_HOSTS = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS} | {"fafda.to"}
 
 
 def _normalize_url(url: str, base_url: str | None = None) -> str:
@@ -271,20 +269,24 @@ def _looks_like_direct_download(url: str) -> bool:
     except Exception:
         return False
 
+    if len(url) > 2000:
+        return False
     try:
-        public_url(url)
+        public_url(url, BZZHR_FILE_HOSTS)
     except ValueError:
         return False
 
-    parts = [part for part in parsed.path.split("/") if part]
-    if len(parts) < 2 or parts[0] != "d":
+    if not re.fullmatch(r"/d/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.%()-]+)*", parsed.path):
         return False
+    if re.search(r"%(?![0-9a-fA-F]{2})", parsed.path + parsed.query):
+        return False
+    values = parse_qs(parsed.query).get("v", [])
+    return len(values) == 1 and bool(values[0]) and not any(unicodedata.category(c) in {"Cc", "Cf"} or c == "\\" for c in unquote(parsed.path + parsed.query))
 
-    return bool(parse_qs(parsed.query).get("v"))
 
 
 def _looks_like_cloudflare_challenge(status: int, html: str) -> bool:
-    """ميّز صفحة Cloudflare الحقيقية قبل تشغيل solver الثقيل."""
+    """ميّز التحقق البشري لإغلاق المعالجة بأمان."""
     body = (html or "").lower()
     markers = (
         "cf-chl-",
@@ -336,7 +338,7 @@ def _extract_signed_download_endpoint(html: str, page_url: str) -> str | None:
 
     for element in soup.select('[hx-get*="/download"]'):
         hx_get = (element.get("hx-get") or "").strip()
-        if not hx_get:
+        if not hx_get or any(c.isspace() or ord(c) < 32 for c in hx_get):
             continue
 
         endpoint = _normalize_url(hx_get, page_url)
@@ -360,6 +362,8 @@ def _direct_link_from_headers(
     if not raw:
         return None
 
+    if any(c.isspace() or ord(c) < 32 for c in raw) or "#" in raw or "\\" in raw:
+        return None
     direct_link = _normalize_url(raw, base_url)
     if not _looks_like_direct_download(direct_link):
         return None
@@ -379,12 +383,6 @@ def _source_referer(source_page_url: str | None) -> str | None:
     if source_page_url and _is_steamrip_url(source_page_url):
         return source_page_url
     return None
-
-
-def _configured_proxy() -> str | None:
-    """Proxy اختياري للبيئات التي يحجب فيها المزود IP مركز البيانات."""
-    value = (os.getenv("BZZHR_PROXY_URL") or "").strip()
-    return value or None
 
 
 async def fetch_game_data(page_url: str) -> dict:
@@ -420,7 +418,7 @@ async def fetch_game_data(page_url: str) -> dict:
     if image_url:
         logger.info("SteamRIP game image found: %s", _safe_url_for_log(image_url))
     else:
-        logger.warning("SteamRIP game image was not found for %s", final_page_url)
+        logger.warning("SteamRIP game image unavailable host=%s", urlsplit(final_page_url).hostname)
 
     download_buttons = soup.select(
         "a.shortc-button, "
@@ -458,372 +456,77 @@ async def fetch_game_data(page_url: str) -> dict:
     }
 
 
-async def _resolve_candidate_fast(
-    candidate_url: str,
-    source_page_url: str | None = None,
-) -> str | None:
-    """Fast path بدون Browser. ينجح إذا أعاد BZZHR الصفحة الحقيقية مباشرة."""
-    session_headers = dict(HEADERS)
-    referer = _source_referer(source_page_url)
-    if referer:
-        session_headers["Referer"] = referer
-
-    session_kwargs: dict[str, object] = {
-        "impersonate": "chrome",
-        "headers": session_headers,
-    }
-    proxy = _configured_proxy()
-    if proxy:
-        raise ValueError('UNVERIFIED_PROXY_NOT_SUPPORTED')
-    public_url(candidate_url,set(BZZHR_MIRRORS) | {'www.'+v for v in BZZHR_MIRRORS})
-    host=urlsplit(candidate_url).hostname
-    addresses=await asyncio.wait_for(asyncio.to_thread(public_addresses,host),5)
-    session_kwargs['curl_options']={CurlOpt.RESOLVE:[f'{host}:443:{addresses[0]}']}
-
-    async with CurlAsyncSession(**session_kwargs) as session:
-        page_response = await session.get(
-            candidate_url,
-            timeout=20,
-            allow_redirects=False,
-        )
-
-        logger.info(
-            "BZZHR fast page HTTP %s for %s",
-            page_response.status_code,
-            _safe_url_for_log(candidate_url),
-        )
-
-        if page_response.status_code != 200:
-            location = page_response.headers.get("Location") or page_response.headers.get("location")
-            if location:
-                logger.info(
-                    "BZZHR fast redirect target: %s",
-                    _safe_url_for_log(_normalize_url(location, candidate_url)),
-                )
-            return None
-
-        page_url = str(page_response.url or candidate_url)
-        if not _is_bzzhr_url(page_url):
-            return None
-
-        signed_endpoint = _extract_signed_download_endpoint(
-            page_response.text,
-            page_url,
-        )
-        if not signed_endpoint:
-            return None
-        if urlsplit(signed_endpoint).hostname != host:
-            return None
-
-        hx_headers = {
-            "Accept": "*/*",
-            "HX-Request": "true",
-            "HX-Current-URL": page_url,
-            "Referer": page_url,
-        }
-
-        response = await session.get(
-            signed_endpoint,
-            headers=hx_headers,
-            timeout=20,
-            allow_redirects=False,
-        )
-
-        logger.info(
-            "BZZHR fast download HTTP %s for %s",
-            response.status_code,
-            _safe_url_for_log(signed_endpoint),
-        )
-
-        if response.status_code not in {200, 204}:
-            return None
-
-        return _direct_link_from_headers(response.headers, signed_endpoint)
-
-
-def _browser_fetch_hx_redirect(
-    context: object,
-    page_url: str,
-    signed_download_url: str,
-    timeout_ms: int,
-    source_page_url: str | None = None,
-) -> str | None:
-    """نفذ HTMX داخل نفس Browser context والكوكيز التي فتحت صفحة الملف."""
-    browser_page = context.new_page()
-    try:
-        referer = _source_referer(source_page_url)
-        if referer:
-            browser_page.set_extra_http_headers({"Referer": referer})
-
-        browser_page.goto(
-            page_url,
-            wait_until="domcontentloaded",
-            timeout=timeout_ms,
-        )
-
-        if not _is_bzzhr_url(browser_page.url):
-            logger.warning(
-                "BZZHR browser navigation left provider: %s",
-                _safe_url_for_log(browser_page.url),
-            )
-            return None
-
-        result = browser_page.evaluate(
-            """
-            async ({ signedDownloadUrl, pageUrl }) => {
-              const response = await fetch(signedDownloadUrl, {
-                method: 'GET',
-                credentials: 'same-origin',
-                redirect: 'manual',
-                headers: {
-                  'Accept': '*/*',
-                  'HX-Request': 'true',
-                  'HX-Current-URL': pageUrl
-                }
-              });
-
-              const headers = {};
-              for (const [key, value] of response.headers.entries()) {
-                headers[key] = value;
-              }
-
-              return {
-                status: response.status,
-                headers
-              };
-            }
-            """,
-            {
-                "signedDownloadUrl": signed_download_url,
-                "pageUrl": page_url,
-            },
-        )
-    finally:
-        browser_page.close()
-
-    try:
-        status = int(result.get("status") or 0)
-    except (AttributeError, TypeError, ValueError):
+async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | None = None) -> str | None:
+    hosts = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS}
+    public_url(candidate_url, hosts)
+    headers = dict(HEADERS)
+    if _source_referer(source_page_url):
+        headers["Referer"] = source_page_url
+    body, _, page_url, page_headers, status = await fetch_public_response(
+        candidate_url, allowed_hosts=hosts, headers=headers, max_bytes=1024 * 1024,
+        timeout=10, raise_status=False,
+    )
+    html = body.decode("utf-8", "replace")
+    if status != 200 or _looks_like_cloudflare_challenge(status, html):
         return None
-
-    if status not in {200, 204}:
-        logger.warning(
-            "BZZHR browser download returned HTTP %s for %s",
-            status,
-            _safe_url_for_log(signed_download_url),
-        )
+    endpoint = _extract_signed_download_endpoint(html, page_url)
+    if not endpoint or urlsplit(endpoint).hostname != urlsplit(page_url).hostname:
         return None
-
-    headers = result.get("headers")
-    if not isinstance(headers, Mapping):
+    base = urlsplit(page_url)
+    parsed = urlsplit(endpoint)
+    if parsed.path != base.path.rstrip("/") + "/download" or not parse_qs(parsed.query).get("t"):
         return None
-
-    return _direct_link_from_headers(headers, signed_download_url)
-
-
-def _browser_page_result(
-    page: object,
-    candidate: str,
-) -> tuple[str | None, bool]:
-    """أعد signed endpoint وهل الصفحة Cloudflare challenge."""
-    status = int(getattr(page, "status", 0) or 0)
-    page_url = str(getattr(page, "url", "") or candidate)
-    html = _page_html(page)
-
-    if not _is_bzzhr_url(page_url):
-        logger.warning(
-            "BZZHR browser page redirected outside provider: %s",
-            _safe_url_for_log(page_url),
-        )
-        return None, False
-
-    signed_endpoint = _extract_signed_download_endpoint(html, page_url)
-    if signed_endpoint:
-        return signed_endpoint, False
-
-    challenge = _looks_like_cloudflare_challenge(status, html)
-    if not challenge:
-        logger.warning(
-            "Signed BZZHR hx-get was not found for %s (HTTP %s)",
-            _safe_url_for_log(page_url),
-            status or "unknown",
-        )
-
-    return None, challenge
-
-
-def _resolve_candidates_with_browser_sync(
-    candidates: list[str],
-    source_page_url: str | None = None,
-) -> str | None:
-    """Browser fallback: تصفح عادي أولاً، وCloudflare solver فقط عند وجود challenge فعلي."""
-    try:
-        from scrapling.fetchers import StealthySession
-    except ImportError:
-        logger.exception(
-            "Scrapling browser fetchers are not installed; "
-            "cannot resolve protected BZZHR pages."
-        )
+    from http.cookies import SimpleCookie
+    cookies = SimpleCookie()
+    cookies.load(page_headers.get("Set-Cookie") or page_headers.get("set-cookie") or "")
+    cookie_header = "; ".join(f"{key}={value.value}" for key, value in cookies.items())
+    if len(cookie_header) > 2048 or any(ord(c) < 32 for c in cookie_header):
         return None
-
-    executable_path = os.getenv("SCRAPLING_EXECUTABLE_PATH") or None
-    referer = _source_referer(source_page_url)
-    proxy = _configured_proxy()
-
-    session_kwargs: dict[str, object] = {
-        "headless": True,
-        "block_webrtc": True,
-        "solve_cloudflare": False,
-        "google_search": False,
-    }
-    if executable_path:
-        session_kwargs["executable_path"] = executable_path
-    if proxy:
-        raise ValueError('UNVERIFIED_PROXY_NOT_SUPPORTED')
-    # Pin the finite browser provider set at launch, with all unknown DNS denied.
-    # This also covers redirects, images, scripts, iframes and browser fetch().
-    pins={}
-    for host in (*BZZHR_MIRRORS,*('www.'+v for v in BZZHR_MIRRORS),'challenges.cloudflare.com'):
-        pins[host]=public_addresses(host)[0]
-    session_kwargs['extra_flags']=['--disable-quic','--host-resolver-rules='+', '.join(
-        [f'MAP {host} {address}' for host,address in pins.items()]+['MAP * ~NOTFOUND']), '--proxy-server=direct://']
-    session_kwargs['additional_args']={'service_workers':'block'}
-    session_kwargs['dns_over_https']=False
-
-    request_headers = {"Referer": referer} if referer else None
-
-    with StealthySession(**session_kwargs) as session:
-        def guard(route):
-            try:
-                public_url(route.request.url,set(pins))
-            except ValueError:
-                route.abort()
-            else:
-                route.continue_()
-        session.context.route('**/*',guard)
-        for candidate in candidates:
-            logger.info(
-                "Trying BZZHR browser mirror: %s",
-                _safe_url_for_log(candidate),
-            )
-
-            try:
-                page = session.fetch(
-                    candidate,
-                    network_idle=False,
-                    solve_cloudflare=False,
-                    google_search=False,
-                    extra_headers=request_headers,
-                    timeout=BZZHR_BROWSER_TIMEOUT_MS,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "BZZHR browser normal fetch failed for %s: %s",
-                    _safe_url_for_log(candidate),
-                    exc,
-                )
-                continue
-
-            signed_endpoint, challenge = _browser_page_result(page, candidate)
-
-            if not signed_endpoint and challenge:
-                logger.info(
-                    "Cloudflare challenge detected for %s; retrying with solver.",
-                    _safe_url_for_log(candidate),
-                )
-                try:
-                    page = session.fetch(
-                        candidate,
-                        network_idle=False,
-                        solve_cloudflare=True,
-                        google_search=False,
-                        extra_headers=request_headers,
-                        timeout=BZZHR_CLOUDFLARE_TIMEOUT_MS,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "BZZHR Cloudflare retry failed for %s: %s",
-                        _safe_url_for_log(candidate),
-                        exc,
-                    )
-                    continue
-
-                signed_endpoint, _ = _browser_page_result(page, candidate)
-
-            if not signed_endpoint:
-                continue
-
-            page_url = str(getattr(page, "url", "") or candidate)
-            logger.info(
-                "Signed BZZHR endpoint found for %s",
-                _safe_url_for_log(page_url),
-            )
-
-            direct_link = _browser_fetch_hx_redirect(
-                session.context,
-                page_url,
-                signed_endpoint,
-                BZZHR_BROWSER_TIMEOUT_MS,
-                source_page_url,
-            )
-            if direct_link:
-                logger.info("BZZHR direct link resolved successfully via browser.")
-                return direct_link
-
-    return None
+    _, _, _, response_headers, status = await fetch_public_response(
+        endpoint, allowed_hosts=hosts,
+        headers={"HX-Request": "true", "HX-Current-URL": page_url, "Referer": page_url,
+                 **({"Cookie": cookie_header} if cookie_header else {})},
+        max_bytes=64 * 1024, timeout=10, follow=False, raise_status=False,
+    )
+    if status not in {200, 204, 302, 303}:
+        return None
+    direct = _direct_link_from_headers(response_headers, endpoint)
+    if direct:
+        await asyncio.wait_for(asyncio.to_thread(public_addresses, urlsplit(direct).hostname), 3)
+    return direct
 
 
-async def extract_bzzhr_direct_link(
-    bzzhr_url: str,
-    source_page_url: str | None = None,
-) -> str | None:
-    """استخرج رابط الملف المباشر من أي رابط BZZHR/BuzzHeavier صالح.
-
-    file-id ديناميكي ويأتي من SteamRIP لكل لعبة. نجرب HTTP سريعاً أولاً ثم
-    Browser stealth. الـ Cloudflare solver لا يعمل إلا إذا ظهرت challenge حقيقية.
-    يمكن ضبط BZZHR_PROXY_URL اختيارياً إذا كانت IP بيئة الاستضافة محجوبة.
-    """
+async def extract_bzzhr_direct_link(bzzhr_url: str, source_page_url: str | None = None) -> str | None:
+    """Fresh bounded HTTP only. Challenges fail closed; never cache completed signed URLs."""
+    global _BZZHR_BACKOFF_UNTIL
     candidates = _bzzhr_candidates(bzzhr_url)
     if not candidates:
-        logger.warning("Invalid BZZHR URL: %s", _safe_url_for_log(bzzhr_url))
+        return None
+    key = candidates[0]
+    if key in _BZZHR_INFLIGHT:
+        return await asyncio.shield(_BZZHR_INFLIGHT[key])
+    if len(_BZZHR_INFLIGHT) >= 2 or asyncio.get_running_loop().time() < _BZZHR_BACKOFF_UNTIL:
         return None
 
-    for candidate in candidates:
+    async def resolve():
+        global _BZZHR_BACKOFF_UNTIL
         try:
-            logger.info(
-                "Trying BZZHR fast mirror: %s",
-                _safe_url_for_log(candidate),
-            )
-            direct_link = await _resolve_candidate_fast(candidate, source_page_url)
-            if direct_link:
-                logger.info("BZZHR direct link resolved successfully via fast path.")
-                return direct_link
-        except Exception as exc:
-            logger.warning(
-                "BZZHR fast mirror failed for %s: %s",
-                _safe_url_for_log(candidate),
-                exc,
-            )
-
-    async with _BZZHR_BROWSER_LOCK:
-        try:
-            direct_link = await asyncio.to_thread(
-                _resolve_candidates_with_browser_sync,
-                candidates,
-                source_page_url,
-            )
-        except Exception:
-            logger.exception(
-                "BZZHR browser resolver crashed for %s",
-                _safe_url_for_log(bzzhr_url),
-            )
+            async with asyncio.timeout(25):
+                for candidate in candidates:
+                    try:
+                        direct = await _resolve_candidate_fast(candidate, source_page_url)
+                        if direct:
+                            return direct
+                    except (ValueError, TimeoutError, aiohttp.ClientError):
+                        logger.warning("BZZHR public HTTP unavailable host=%s", urlsplit(candidate).hostname)
+            _BZZHR_BACKOFF_UNTIL = asyncio.get_running_loop().time() + 10
             return None
+        except TimeoutError:
+            _BZZHR_BACKOFF_UNTIL = asyncio.get_running_loop().time() + 10
+            return None
+        finally:
+            _BZZHR_INFLIGHT.pop(key, None)
 
-    if direct_link:
-        return direct_link
-
-    logger.warning(
-        "لم يتم العثور على رابط مباشر من BZZHR بعد تجربة HTTP والمتصفح: %s",
-        _safe_url_for_log(bzzhr_url),
-    )
-    return None
+    task = asyncio.create_task(resolve())
+    _BZZHR_INFLIGHT[key] = task
+    return await asyncio.shield(task)
