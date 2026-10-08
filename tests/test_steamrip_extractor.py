@@ -14,14 +14,9 @@ def test_normalize_protocol_relative_bzzhr_url():
     assert _normalize_url("//bzzhr.to/file123") == "https://bzzhr.to/file123"
 
 
-def test_bzzhr_candidates_preserve_dynamic_file_path_and_query():
-    candidates = _bzzhr_candidates("https://bzzhr.to/file-xyz?t=abc")
-
-    assert candidates == [
-        "https://bzzhr.to/file-xyz?t=abc",
-        "https://bzzhr.co/file-xyz?t=abc",
-        "https://buzzheavier.com/file-xyz?t=abc",
-    ]
+def test_bzzhr_candidates_keep_only_stable_original_host():
+    assert _bzzhr_candidates("https://bzzhr.co/file-xyz") == ["https://bzzhr.co/file-xyz"]
+    assert _bzzhr_candidates("https://bzzhr.to/file-xyz?t=abc") == []
 
 
 def test_signed_download_endpoint_is_taken_from_real_hx_get():

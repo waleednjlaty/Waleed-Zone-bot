@@ -1,0 +1,9 @@
+# BZZHR follow-up diagnosis, 2026-10-08
+
+Based on latest main 139a7dd (#8), preserving its observed BuzzHeavier CDN and dynamic HTMX endpoint support. Companion report: https://github.com/waleednjlaty/Waleed-zone-wab/blob/fix/bzzhr-co-production-followup/docs/BZZHR_PRODUCTION_FIX.md
+
+An independently uploaded original 67-byte UTF-8 canary, public page https://bzzhr.co/8hcdyeypd460 (expires 2026-10-12), downloaded successfully via ts.bzzhr.co and ts.buzzheavier.com with SHA256 6c2b4eccbe5ad9d248f33983d466fefd5e619046320f429f78dd486c578496bc. Same ID on bzzhr.to returned 404. Public-network byte verification does not imply Railway egress works: website Railway canary observed 403 PROVIDER_CHALLENGE on buzzheavier.com, separately from prior CDN allowlist failure.
+
+Changes add only the observed exact ts.bzzhr.co host, preserve original source namespaces, honor actual dynamic hx-get/data-hx-get actions, maintain exact-host/path cookies across the page/HTMX exchange, validate HEAD/fallback header-only GET without transferring large files, return the newly validated final URL, preserve all actual advertised SteamRIP sources, classify safe stage/host/status errors, and enforce per-source retry budgets. Human challenges stop resolution; no solver, browser spoofing workaround or challenge bypass was added. Existing optional resolver callers remain compatible; download service uses strict finite diagnostics. Rechecks source revision/publication before returning a link.
+
+202 Python tests passed after reconciliation, including #8's arbitrary endpoint query/path and binary Content-Type validation regressions. CI compile/security helper lint/dependency audit and release state are recorded on the PR. No shared PostgreSQL schema changes, production catalog writes, Telegram messages, secrets exposure or completed signed-URL persistence.
