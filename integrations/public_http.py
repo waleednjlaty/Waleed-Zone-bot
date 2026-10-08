@@ -94,7 +94,10 @@ async def fetch_public_response(
     image=False,
     follow=True,
     raise_status=True,
+    method="GET",
 ):
+    if method not in {"GET", "HEAD"}:
+        raise ValueError("INVALID_METHOD")
     connector = aiohttp.TCPConnector(resolver=PublicResolver(), use_dns_cache=False)
     async with (
         asyncio.timeout(timeout),
@@ -106,7 +109,8 @@ async def fetch_public_response(
     ):
         for _ in range(5):
             public_url(url, allowed_hosts)
-            async with session.get(url, headers=headers, allow_redirects=False) as response:
+            request = session.head if method == "HEAD" else session.get
+            async with request(url, headers=headers, allow_redirects=False) as response:
                 if follow and response.status in {301, 302, 303, 307, 308}:
                     location = response.headers.get("Location")
                     if (
@@ -117,10 +121,19 @@ async def fetch_public_response(
                         or "\\" in location
                     ):
                         raise ValueError("INVALID_REDIRECT")
-                    url = public_url(urljoin(url, location), allowed_hosts)
+                    next_url = public_url(urljoin(url, location), allowed_hosts)
+                    if urlsplit(next_url).hostname != urlsplit(url).hostname:
+                        sensitive = {"cookie", "authorization", "referer", "hx-current-url"}
+                        headers = {key: value for key, value in (headers or {}).items()
+                                   if key.lower() not in sensitive}
+                    url = next_url
                     continue
                 if raise_status:
                     response.raise_for_status()
+                if method == "HEAD":
+                    content_type = response.headers.get("Content-Type", "").split(";", 1)[0]
+                    return (b"", content_type, str(response.url),
+                            dict(response.headers), response.status)
                 if response.headers.get("HX-Redirect") or response.status in {
                     301,
                     302,

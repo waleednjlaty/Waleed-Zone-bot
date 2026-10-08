@@ -189,3 +189,28 @@ def test_game_image_does_not_use_images_after_screenshots_heading():
     soup = BeautifulSoup(html, "html.parser")
 
     assert _extract_game_image(soup, "https://steamrip.com/example/") is None
+
+
+def test_live_observed_ts_cdn_accepted_exactly():
+    assert _direct_link_from_headers({'HX-Redirect': 'https://ts.buzzheavier.com/d/724hyjkckpyu?v=fixture'}, 'https://buzzheavier.com/724hyjkckpyu/download?t=x') == 'https://ts.buzzheavier.com/d/724hyjkckpyu?v=fixture'
+    assert _direct_link_from_headers({'HX-Redirect': 'https://evil.buzzheavier.com/d/id?v=x'}, 'https://buzzheavier.com/id/download?t=x') is None
+
+
+def test_declared_endpoint_uses_dynamic_path_and_query():
+    assert _extract_signed_download_endpoint('<a hx-get="/file-xyz/preview?t=x"><button hx-get="/file-xyz/fetch?signature=x&amp;alt=true">', 'https://bzzhr.to/file-xyz') == 'https://bzzhr.to/file-xyz/fetch?signature=x&alt=true'
+
+
+async def test_resolver_checks_final_headers_without_file_bytes(monkeypatch):
+    from integrations import steamrip_extractor as extractor
+    calls = []
+    async def fetch(url, **kwargs):
+        calls.append((url, kwargs))
+        if len(calls) == 1:
+            return b'<a hx-get="/file/fetch?sig=x">', 'text/html', url, {}, 200
+        if len(calls) == 2:
+            return b'', '', url, {'HX-Redirect': 'https://ts.buzzheavier.com/d/file?v=x'}, 204
+        assert kwargs['method'] == 'HEAD'
+        return b'', 'application/octet-stream', url, {}, 200
+    monkeypatch.setattr(extractor, 'fetch_public_response', fetch)
+    assert await extractor._resolve_candidate_fast('https://bzzhr.co/file') == 'https://ts.buzzheavier.com/d/file?v=x'
+    assert len(calls) == 3
