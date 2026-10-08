@@ -118,7 +118,7 @@ def test_steamrip_article_with_shared_challenge_platform_script_is_not_blocked()
     normal = ("""<html><head><title>Example Game</title>
       <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></head>
       <body><article><h1 class="entry-title">Example Game</h1>
-      <a href="https://bzzhr.co/file">BZZHR</a></article></body></html>""")
+      <a class="shortc-button" href="https://bzzhr.co/file">BZZHR</a></article></body></html>""")
     assert not e._looks_like_cloudflare_challenge(200, normal)
 
 
@@ -127,7 +127,7 @@ async def test_normal_steamrip_article_with_cloudflare_script_extracts_links(mon
     normal = ("""<title>Example Game</title>
       <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>
       <article><h1 class="entry-title">Example Game</h1>
-      <a href="https://bzzhr.co/file">BZZHR</a></article>""")
+      <a class="shortc-button" href="https://bzzhr.co/file">BZZHR</a></article>""")
     async def transport(url, stage, source, **kwargs):
         assert url == page
         return normal.encode(), "text/html", page, {}, 200
