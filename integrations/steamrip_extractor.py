@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
 
-from integrations.public_http import fetch_public_bytes, fetch_public_response, public_addresses, public_url
+from integrations.public_http import fetch_public_bytes, fetch_public_response, public_url
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ BZZHR_MIRRORS = (
 # Only two public HTTP resolutions per instance; no browser or challenge solver.
 _BZZHR_INFLIGHT: dict[str, asyncio.Task] = {}
 _BZZHR_BACKOFF_UNTIL = 0.0
-BZZHR_FILE_HOSTS = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS} | {"fafda.to"}
+BZZHR_FILE_HOSTS = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS} | {"fafda.to", "ts.buzzheavier.com"}
 
 
 def _normalize_url(url: str, base_url: str | None = None) -> str:
@@ -336,13 +336,17 @@ def _extract_signed_download_endpoint(html: str, page_url: str) -> str | None:
     """استخرج hx-get الحقيقي؛ لا نخترع /download لأنه يحتاج token موقّع."""
     soup = BeautifulSoup(html, "html.parser")
 
-    for element in soup.select('[hx-get*="/download"]'):
+    for element in soup.select('[hx-get]'):
         hx_get = (element.get("hx-get") or "").strip()
         if not hx_get or any(c.isspace() or ord(c) < 32 for c in hx_get):
             continue
 
         endpoint = _normalize_url(hx_get, page_url)
-        if _is_bzzhr_url(endpoint):
+        base, parsed = urlsplit(page_url), urlsplit(endpoint)
+        file_id = base.path.strip('/').split('/')[0]
+        if (_is_bzzhr_url(endpoint) and parsed.hostname == base.hostname
+                and file_id and parsed.path.startswith('/' + file_id + '/')
+                and not re.search(r'/(preview|delete|remove|login|account)(/|$)', parsed.path, re.I)):
             return endpoint
 
     return None
@@ -474,7 +478,7 @@ async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | Non
         return None
     base = urlsplit(page_url)
     parsed = urlsplit(endpoint)
-    if parsed.path != base.path.rstrip("/") + "/download" or not parse_qs(parsed.query).get("t"):
+    if not parsed.path.startswith(base.path.rstrip("/") + "/") or re.search(r"/(preview|delete|remove|login|account)(/|$)", parsed.path, re.I):
         return None
     from http.cookies import SimpleCookie
     cookies = SimpleCookie()
@@ -488,11 +492,18 @@ async def _resolve_candidate_fast(candidate_url: str, source_page_url: str | Non
                  **({"Cookie": cookie_header} if cookie_header else {})},
         max_bytes=64 * 1024, timeout=10, follow=False, raise_status=False,
     )
-    if status not in {200, 204, 302, 303}:
+    if status not in {200, 204, 301, 302, 303, 307, 308}:
         return None
     direct = _direct_link_from_headers(response_headers, endpoint)
     if direct:
-        await asyncio.wait_for(asyncio.to_thread(public_addresses, urlsplit(direct).hostname), 3)
+        _, content_type, _, _, final_status = await fetch_public_response(
+            direct, allowed_hosts=BZZHR_FILE_HOSTS, method='HEAD', timeout=10,
+            raise_status=False,
+        )
+        if final_status not in {200, 204} or not content_type or content_type in {
+            'text/html', 'application/xhtml+xml', 'application/json'
+        }:
+            return None
     return direct
 
 
