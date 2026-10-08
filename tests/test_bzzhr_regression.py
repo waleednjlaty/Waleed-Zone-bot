@@ -112,3 +112,34 @@ async def test_rate_limit_does_not_try_advertised_alternate(monkeypatch):
     with pytest.raises(e.ProviderResolutionError, match='PROVIDER_RATE_LIMITED'):
         await e._resolve_candidate_fast(page)
     assert len(calls) == 2
+
+
+def test_steamrip_article_with_shared_challenge_platform_script_is_not_blocked():
+    normal = ("""<html><head><title>Example Game</title>
+      <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></head>
+      <body><article><h1 class="entry-title">Example Game</h1>
+      <a href="https://bzzhr.co/file">BZZHR</a></article></body></html>""")
+    assert not e._looks_like_cloudflare_challenge(200, normal)
+
+
+async def test_normal_steamrip_article_with_cloudflare_script_extracts_links(monkeypatch):
+    page = "https://steamrip.com/example-game/"
+    normal = ("""<title>Example Game</title>
+      <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>
+      <article><h1 class="entry-title">Example Game</h1>
+      <a href="https://bzzhr.co/file">BZZHR</a></article>""")
+    async def transport(url, stage, source, **kwargs):
+        assert url == page
+        return normal.encode(), "text/html", page, {}, 200
+    monkeypatch.setattr(e, "_fetch_provider", transport)
+    result = await e.fetch_game_data(page)
+    assert result["title"] == "Example Game"
+    assert "https://bzzhr.co/file" in result["servers"].values()
+
+
+@pytest.mark.parametrize("html", [
+    '<title>Just a moment...</title><script src="/cdn-cgi/challenge-platform/x"></script>',
+    '<div class="cf-turnstile" data-sitekey="fixture"></div>',
+])
+def test_actual_200_interstitial_still_refused(html):
+    assert e._looks_like_cloudflare_challenge(200, html)
