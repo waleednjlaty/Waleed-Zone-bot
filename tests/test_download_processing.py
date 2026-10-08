@@ -187,3 +187,18 @@ async def test_bot_reports_source_failure_with_stable_website_link(monkeypatch):
     sent = call.message.answer.await_args.args[0]
     assert "https://waleed-zone.up.railway.app/download/54" in sent
     assert "BZZHR_NOT_FOUND" not in sent
+
+
+@pytest.mark.parametrize("code", ["PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED", "PROVIDER_RATE_LIMITED", "PROVIDER_FORBIDDEN"])
+async def test_steamrip_service_stops_all_sources_at_provider_access_barrier(db, monkeypatch, code):
+    async with db.session() as session:
+        app = await repo.create_application(session, name="Barrier QA", devupload_url="https://steamrip.com/qa/")
+        app.published = True
+        await session.commit()
+        monkeypatch.setattr(service, "fetch_game_data", AsyncMock(return_value={"servers": {
+            "first": "https://bzzhr.co/first", "second": "https://buzzheavier.com/second"}}))
+        resolver = AsyncMock(side_effect=extractor.ProviderResolutionError(code, "bzzhr_page", "https://bzzhr.co/first", 429))
+        monkeypatch.setattr(service, "extract_bzzhr_direct_link", resolver)
+        with pytest.raises(extractor.ProviderResolutionError, match=code):
+            await service.resolve_application_download(session, app.id)
+        resolver.assert_awaited_once()
