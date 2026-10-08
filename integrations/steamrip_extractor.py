@@ -287,12 +287,23 @@ def _looks_like_direct_download(url: str) -> bool:
 
 
 def _looks_like_cloudflare_challenge(status: int, html: str) -> bool:
-    """ميّز التحقق البشري لإغلاق المعالجة بأمان."""
+    """Classify actual access interstitials, not a shared protection script.
+
+    The bot never performs human verification or tries to solve a challenge.
+    Normal 200 game pages can legitimately load Cloudflare's challenge-platform
+    script; those pages must still be parsed for their real download sources.
+    """
     body = (html or "").lower()
-    return (any(marker in body for marker in ("cf-chl-", "/cdn-cgi/challenge-platform/"))
-            or bool(re.search(r"<title[^>]*>\s*(just a moment|attention required)", body))
-            or bool(re.search(r"<(?:div|form)[^>]+(?:class|id)=[\"\'][^\"\']*cf-turnstile", body))
-            or status not in {200, 204, 206} and "verify you are human" in body)
+    interstitial = (
+        bool(re.search(r"<title[^>]*>\s*(?:just a moment|attention required)\b", body))
+        or bool(re.search(r"<(?:div|form)[^>]+(?:class|id)=[\"\'][^\"\']*(?:challenge-form|cf-turnstile)", body))
+    )
+    blocked_with_markers = status in {403, 429, 503} and any(
+        marker in body for marker in (
+            "cf-chl-", "/cdn-cgi/challenge-platform/", "verify you are human"
+        )
+    )
+    return interstitial or blocked_with_markers
 
 
 def _identify_server(url: str, text: str) -> str:
