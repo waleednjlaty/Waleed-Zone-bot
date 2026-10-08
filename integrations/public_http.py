@@ -30,7 +30,8 @@ class ExactHostCookieJar(aiohttp.CookieJar):
                 parsed[name] = value
         for name, value in parsed.items():
             domain = value["domain"].lstrip(".").lower()
-            if domain and domain != response_url.host:
+            if (domain and domain != response_url.host
+                    and not response_url.host.endswith("." + domain)):
                 continue
             morsel = copy(value)
             morsel["domain"] = ""

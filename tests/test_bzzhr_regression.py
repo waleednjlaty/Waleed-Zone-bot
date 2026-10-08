@@ -82,3 +82,33 @@ async def test_head_html_is_not_file_success(monkeypatch):
         await e._validate_file(final)
     assert caught.value.stage == 'file_probe'
     assert 'secret' not in str(caught.value)
+
+
+async def test_cookie_expiry_path_and_parent_domain_are_host_scoped():
+    from http.cookies import SimpleCookie
+    from yarl import URL
+    from integrations.public_http import ExactHostCookieJar
+    jar = ExactHostCookieJar()
+    jar.update_cookies(SimpleCookie('session=ok; Domain=bzzhr.co; Path=/file'), URL('https://www.bzzhr.co/file'))
+    jar.update_cookies(SimpleCookie('expired=bad; Max-Age=0; Path=/'), URL('https://www.bzzhr.co/file'))
+    assert jar.filter_cookies(URL('https://www.bzzhr.co/file/download'))['session'].value == 'ok'
+    assert not jar.filter_cookies(URL('https://bzzhr.co/file/download'))
+    assert not jar.filter_cookies(URL('https://ts.bzzhr.co/file/download'))
+    assert not jar.filter_cookies(URL('https://www.bzzhr.co/other'))
+    assert 'expired' not in jar.filter_cookies(URL('https://www.bzzhr.co/file/download'))
+    jar.update_cookies(SimpleCookie('session=gone; Domain=bzzhr.co; Path=/file; Max-Age=0'), URL('https://www.bzzhr.co/file'))
+    assert not jar.filter_cookies(URL('https://www.bzzhr.co/file/download'))
+
+
+async def test_rate_limit_does_not_try_advertised_alternate(monkeypatch):
+    page = 'https://bzzhr.co/file'
+    calls = []
+    async def transport(url, **kwargs):
+        calls.append(url)
+        if url == page:
+            return b'<a hx-get="/file/fetch?a=1"><a hx-get="/file/fetch?a=2">', 'text/html', url, {}, 200
+        return b'Rate limited', 'text/html', url, {}, 429
+    monkeypatch.setattr(e, 'fetch_public_response', transport)
+    with pytest.raises(e.ProviderResolutionError, match='PROVIDER_RATE_LIMITED'):
+        await e._resolve_candidate_fast(page)
+    assert len(calls) == 2
