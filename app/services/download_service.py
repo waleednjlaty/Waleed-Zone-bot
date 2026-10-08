@@ -122,7 +122,7 @@ async def send_application_download(call, session: AsyncSession, application_id:
         logging.getLogger(__name__).warning("download failed application_id=%s stage=%s host=%s status=%s category=%s",
             application_id, error.stage, error.host, error.status, error.code)
         messages = {
-            "PROVIDER_CHALLENGE": "المصدر يطلب تحققًا بشريًا. افتح صفحة التحميل في Waleed Zone لإكماله يدويًا؛ جلسة متصفحك منفصلة عن جلسة الخادم.",
+            "PROVIDER_CHALLENGE": "المصدر يعرض صفحة تحقق. افتح صفحة التحميل في Waleed Zone ثم المصدر الأصلي عند الحاجة؛ لا يمكن نقل جلسة متصفحك إلى الخادم.",
             "SOURCE_REMOVED": "ملف المصدر محذوف أو لم يعد متاحًا.",
             "MISSING_HX_REDIRECT": "المصدر لم يُرجع رابط الملف بعد طلب التنزيل.",
             "FINAL_DESTINATION_NOT_FILE": "خادم المصدر أعاد صفحة بدل ملف قابل للتنزيل.",
@@ -130,7 +130,7 @@ async def send_application_download(call, session: AsyncSession, application_id:
         await call.message.answer(messages.get(error.code, "تعذر تجهيز مصدر التحميل. أعد المحاولة لاحقًا.") + "\n" + (website_download_url(application_id) or ""))
     except (ValueError, TimeoutError):
         await session.rollback()
-        await call.message.answer("تعذر تجهيز الرابط حاليًا. قد يكون المصدر تغيّر أو يحتاج تحققًا بشريًا؛ أعد المحاولة بعد قليل.")
+        await call.message.answer("تعذر تجهيز الرابط حاليًا. قد يكون المصدر تغيّر؛ افتح صفحة التحميل في Waleed Zone أو أعد المحاولة لاحقًا.\n" + (website_download_url(application_id) or ""))
     except Exception:
         await session.rollback()
         # Never log exception text: HTTP exceptions can contain signed endpoints.

@@ -173,3 +173,17 @@ def test_provider_url_budget_and_explicit_port_fail_closed():
 @pytest.mark.parametrize('url', ['https://fafda.to/d/file/a%0A?v=x', 'https://fafda.to/d/file/%zz?v=x'])
 def test_encoded_destination_fails_closed(url):
     assert not extractor._looks_like_direct_download(url)
+
+
+async def test_bot_reports_source_failure_with_stable_website_link(monkeypatch):
+    async def blocked(session, app_id):
+        raise ValueError("BZZHR_NOT_FOUND")
+    monkeypatch.setattr(service, "resolve_application_download", blocked)
+    monkeypatch.setattr(service, "website_download_url", lambda app_id: f"https://waleed-zone.up.railway.app/download/{app_id}")
+    call = SimpleNamespace(from_user=SimpleNamespace(id=991), answer=AsyncMock(),
+        message=SimpleNamespace(answer=AsyncMock(), edit_text=AsyncMock()))
+    session = SimpleNamespace(rollback=AsyncMock())
+    await service.send_application_download(call, session, 54)
+    sent = call.message.answer.await_args.args[0]
+    assert "https://waleed-zone.up.railway.app/download/54" in sent
+    assert "BZZHR_NOT_FOUND" not in sent
