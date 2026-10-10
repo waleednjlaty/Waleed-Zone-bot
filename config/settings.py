@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     HTTP_MAX_RETRIES: int = 3
     DOWNLOAD_DIR: Path = BASE_DIR / "tmp" / "uploads"
 
+    BOT_USERNAME: str = "WaleedZone_bot"
     WEBSITE_BASE_URL: str = "https://waleed-zone.up.railway.app"
     WEBSITE_STATS_URL: str = "https://waleed-zone.up.railway.app/api/stats"
     WEBSITE_STATS_TOKEN: str | None = Field(default=None,repr=False)
