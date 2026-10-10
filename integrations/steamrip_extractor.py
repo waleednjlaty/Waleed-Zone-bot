@@ -49,7 +49,7 @@ BZZHR_MIRRORS = (
 # Only two public HTTP resolutions per instance; no browser or challenge solver.
 _BZZHR_INFLIGHT: dict[str, asyncio.Task] = {}
 _BZZHR_BACKOFF: dict[str, float] = {}
-BZZHR_FILE_HOSTS = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS} | {"fafda.to", "ts.bzzhr.co", "ts.buzzheavier.com"}
+BZZHR_FILE_HOSTS = set(BZZHR_MIRRORS) | {"www." + h for h in BZZHR_MIRRORS} | {"fafda.to", "ts.bzzhr.co", "ts.buzzheavier.com", "ts.bzzhr.to"}
 
 
 def _normalize_url(url: str, base_url: str | None = None) -> str:
