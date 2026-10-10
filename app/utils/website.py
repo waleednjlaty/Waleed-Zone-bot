@@ -45,3 +45,15 @@ def website_app_url(app_id: int, base_url: str | None = None) -> str | None:
 def website_download_url(app_id: int, base_url: str | None = None) -> str | None:
     url = website_app_url(app_id, base_url)
     return url.replace("/app/", "/download/") if url else None
+
+
+def bot_application_url(app_id: int, username: str | None = None) -> str | None:
+    """Stable Telegram app deep link: SteamRIP downloads stay inside the bot."""
+    import re
+    if not isinstance(app_id, int) or isinstance(app_id, bool) or not 0 < app_id <= 2147483647:
+        return None
+    name = username if username is not None else getattr(get_settings(), "BOT_USERNAME", "WaleedZone_bot")
+    name = str(name or "").removeprefix("@")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", name):
+        return None
+    return f"https://t.me/{name}?start=app_{app_id}"
