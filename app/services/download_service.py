@@ -44,8 +44,8 @@ def is_steamrip_application(app: Application) -> bool:
     Everything else (including Telegram Files Channel and approved manual
     sources) belongs to the website's existing protected download flow.
     """
-    original = app.devupload_url or ""
-    custom = app.shrankme_url or ""
+    original = getattr(app, "devupload_url", None) or ""
+    custom = getattr(app, "shrankme_url", None) or ""
     return _is_steamrip_url(original) or _is_bzzhr_url(custom or original)
 
 
