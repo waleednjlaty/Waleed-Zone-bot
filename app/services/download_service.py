@@ -17,7 +17,7 @@ from database.models import Application
 from database import repositories as repo
 from app.utils.website import website_download_url
 from integrations.public_http import public_url
-from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link, _is_bzzhr_url, ProviderResolutionError
+from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link, _is_bzzhr_url, _is_steamrip_url, ProviderResolutionError
 
 _ACTIVE: set[tuple[int, int]] = set()
 
@@ -37,19 +37,34 @@ def manual_url(value: str, hosts: set[str] | None = None) -> str:
     return value
 
 
+def is_steamrip_application(app: Application) -> bool:
+    """Dispatch on the validated *original source*, never a category/name guess.
+
+    A SteamRIP page or BZZHR file page is resolved inside the Telegram bot.
+    Everything else (including Telegram Files Channel and approved manual
+    sources) belongs to the website's existing protected download flow.
+    """
+    original = app.devupload_url or ""
+    custom = app.shrankme_url or ""
+    return _is_steamrip_url(original) or _is_bzzhr_url(custom or original)
+
+
 async def resolve_application_download(session: AsyncSession, application_id: int):
     app = await repo.get_active_application(session, application_id)
     if not app:
         raise ValueError("SOURCE_REMOVED")
     source = await repo.get_delivery_source(session, app.id)
     snapshot = (app.revision, app.shrankme_url, app.devupload_url)
-    if source:
+    original = app.devupload_url
+    if not is_steamrip_application(app):
         url = website_download_url(app.id)
         if not url:
             raise ValueError("INVALID_SOURCE")
         await session.commit()
-        return app, url, "telegram"
-    custom, original = app.shrankme_url, app.devupload_url
+        return app, url, "website"
+    # Keep a source fingerprint to reject administrative edits during provider I/O.
+    source_snapshot = (source.telegram_channel_username, source.telegram_message_id) if source else None
+    custom = app.shrankme_url
     await session.commit()  # No transaction (including middleware reads) across HTTP.
     direct_source = custom if custom and _is_bzzhr_url(custom) else original if not custom and original and _is_bzzhr_url(original) else None
     if direct_source:
@@ -88,7 +103,10 @@ async def resolve_application_download(session: AsyncSession, application_id: in
     current = await session.scalar(select(Application).where(Application.id == application_id)
         .execution_options(populate_existing=True))
     current_source = await repo.get_delivery_source(session, application_id)
-    if (not current or not current.active or not current.published or current_source
+    current_source_snapshot = ((current_source.telegram_channel_username, current_source.telegram_message_id)
+                               if current_source else None)
+    if (not current or not current.active or not current.published
+            or current_source_snapshot != source_snapshot
             or (current.revision, current.shrankme_url, current.devupload_url) != snapshot):
         await session.rollback()
         raise ValueError("SOURCE_CHANGED")
@@ -108,7 +126,7 @@ async def send_application_download(call, session: AsyncSession, application_id:
         app, url, provider = await resolve_application_download(session, application_id)
         text = final_download_message(app, url)
         # Commit counters before sending to Telegram; never hold a transaction during API I/O.
-        if provider != "telegram":
+        if provider != "website":
             await repo.increment_downloads(session, app.id)
             await repo.add_download(session, call.from_user.id, app.id)
             await session.commit()
@@ -122,15 +140,15 @@ async def send_application_download(call, session: AsyncSession, application_id:
         logging.getLogger(__name__).warning("download failed application_id=%s stage=%s host=%s status=%s category=%s",
             application_id, error.stage, error.host, error.status, error.code)
         messages = {
-            "PROVIDER_CHALLENGE": "المصدر يعرض صفحة تحقق. افتح صفحة التحميل في Waleed Zone ثم المصدر الأصلي عند الحاجة؛ لا يمكن نقل جلسة متصفحك إلى الخادم.",
+            "PROVIDER_CHALLENGE": "تعذّر وصول البوت إلى SteamRIP/BZZHR بسبب تحقق المصدر. أعد المحاولة لاحقًا من البوت.",
             "SOURCE_REMOVED": "ملف المصدر محذوف أو لم يعد متاحًا.",
             "MISSING_HX_REDIRECT": "المصدر لم يُرجع رابط الملف بعد طلب التنزيل.",
             "FINAL_DESTINATION_NOT_FILE": "خادم المصدر أعاد صفحة بدل ملف قابل للتنزيل.",
         }
-        await call.message.answer(messages.get(error.code, "تعذر تجهيز مصدر التحميل. أعد المحاولة لاحقًا.") + "\n" + (website_download_url(application_id) or ""))
+        await call.message.answer(messages.get(error.code, "تعذر تجهيز رابط SteamRIP داخل البوت. أعد المحاولة لاحقًا."))
     except (ValueError, TimeoutError):
         await session.rollback()
-        await call.message.answer("تعذر تجهيز الرابط حاليًا. قد يكون المصدر تغيّر؛ افتح صفحة التحميل في Waleed Zone أو أعد المحاولة لاحقًا.\n" + (website_download_url(application_id) or ""))
+        await call.message.answer("تعذر تجهيز رابط SteamRIP داخل البوت حاليًا. حاول مجددًا بعد قليل.")
     except Exception:
         await session.rollback()
         # Never log exception text: HTTP exceptions can contain signed endpoints.
