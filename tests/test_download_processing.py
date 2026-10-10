@@ -175,17 +175,17 @@ def test_encoded_destination_fails_closed(url):
     assert not extractor._looks_like_direct_download(url)
 
 
-async def test_bot_reports_source_failure_with_stable_website_link(monkeypatch):
+async def test_bot_reports_steamrip_provider_failure_without_redirecting_back_to_site(monkeypatch):
     async def blocked(session, app_id):
         raise ValueError("BZZHR_NOT_FOUND")
     monkeypatch.setattr(service, "resolve_application_download", blocked)
-    monkeypatch.setattr(service, "website_download_url", lambda app_id: f"https://waleed-zone.up.railway.app/download/{app_id}")
     call = SimpleNamespace(from_user=SimpleNamespace(id=991), answer=AsyncMock(),
         message=SimpleNamespace(answer=AsyncMock(), edit_text=AsyncMock()))
     session = SimpleNamespace(rollback=AsyncMock())
     await service.send_application_download(call, session, 54)
     sent = call.message.answer.await_args.args[0]
-    assert "https://waleed-zone.up.railway.app/download/54" in sent
+    assert "waleed-zone.up.railway.app/download/54" not in sent
+    assert "داخل البوت" in sent
     assert "BZZHR_NOT_FOUND" not in sent
 
 
@@ -202,3 +202,55 @@ async def test_steamrip_service_stops_all_sources_at_provider_access_barrier(db,
         with pytest.raises(extractor.ProviderResolutionError, match=code):
             await service.resolve_application_download(session, app.id)
         resolver.assert_awaited_once()
+
+
+@pytest.mark.parametrize("source_url", [
+    "https://shrinkme.io/a",
+    "https://devuploads.com/a",
+    "https://example.com/not-an-approved-source",
+])
+async def test_all_non_steamrip_sources_go_to_website_without_external_resolution(db, monkeypatch, source_url):
+    extractor_mock = AsyncMock(side_effect=AssertionError("SteamRIP resolver must not be called"))
+    monkeypatch.setattr(service, "extract_bzzhr_direct_link", extractor_mock)
+    monkeypatch.setattr(service, "fetch_game_data", extractor_mock)
+    async with db.session() as session:
+        app = await repo.create_application(session, name="Site-owned QA", devupload_url=source_url)
+        app.published = True
+        await session.commit()
+        result_app, destination, provider = await service.resolve_application_download(session, app.id)
+        assert result_app.id == app.id
+        assert provider == "website"
+        assert destination.endswith(f"/download/{app.id}")
+        extractor_mock.assert_not_awaited()
+
+
+async def test_telegram_attachment_stays_website_owned(db):
+    from test_telegram_delivery import source
+    async with db.session() as session:
+        app = await repo.create_application(session, name="Telegram QA")
+        app.published = True
+        await session.flush()
+        await repo.bind_telegram_source(session, app.id, source())
+        await session.commit()
+        _, destination, provider = await service.resolve_application_download(session, app.id)
+        assert provider == "website"
+        assert destination.endswith(f"/download/{app.id}")
+
+
+async def test_steamrip_stays_in_bot_even_when_a_telegram_attachment_exists(db, monkeypatch):
+    from test_telegram_delivery import source
+    fetch = AsyncMock(return_value={"servers": {"BZZHR": "https://buzzheavier.com/file-xyz"}})
+    extract = AsyncMock(return_value="https://ts.bzzhr.to/d/file-xyz?v=qa")
+    monkeypatch.setattr(service, "fetch_game_data", fetch)
+    monkeypatch.setattr(service, "extract_bzzhr_direct_link", extract)
+    async with db.session() as session:
+        app = await repo.create_application(session, name="SteamRIP QA", devupload_url="https://steamrip.com/qa/")
+        app.published = True
+        await session.flush()
+        await repo.bind_telegram_source(session, app.id, source())
+        await session.commit()
+        _, destination, provider = await service.resolve_application_download(session, app.id)
+        assert provider == "bzzhr"
+        assert destination == "https://ts.bzzhr.to/d/file-xyz?v=qa"
+        fetch.assert_awaited_once()
+        extract.assert_awaited_once()
