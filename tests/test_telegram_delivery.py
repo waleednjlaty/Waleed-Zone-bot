@@ -138,6 +138,24 @@ def test_channel_publishing_download_cta_is_website():
     assert 'devuploads' not in text and 'shrinkme' not in text and 't.me/' not in text
 
 
+def test_steamrip_channel_publishing_links_to_bot_not_website():
+    from app.handlers.upload import channel_promo
+    app = SimpleNamespace(id=54, name="Steam QA", version="1", size="89 B",
+        description="QA", devupload_url="https://steamrip.com/qa/", shrankme_url=None)
+    caption, kb = channel_promo(app)
+    assert kb is None
+    assert "https://t.me/WaleedZone_bot?start=app_54" in caption
+    assert "waleed-zone.up.railway.app/download/54" not in caption
+
+
+def test_telegram_app_deep_link_rejects_invalid_ids_and_names():
+    from app.utils.website import bot_application_url
+    assert bot_application_url(54) == "https://t.me/WaleedZone_bot?start=app_54"
+    for invalid in [0, -1, True, 2147483648]:
+        assert bot_application_url(invalid) is None
+    assert bot_application_url(54, "bot.evil.test") is None
+
+
 async def test_non_admin_router_middleware_denies_all_mutations():
     from app.handlers.upload import OwnerUploadMiddleware
     event=SimpleNamespace(from_user=SimpleNamespace(id=999),answer=AsyncMock());handler=AsyncMock()
