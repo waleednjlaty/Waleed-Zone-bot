@@ -25,7 +25,7 @@ from app.utils.constants import AdminCB, AppCB, MainMenuCB
 from app.utils.helpers import build_search_text, format_size, is_admin
 from app.utils.owner_guard import owner_gate
 from app.utils.text import append_app_footer, bounded_html, download_link_block, escape_html
-from app.utils.website import website_download_url
+from app.utils.website import website_download_url, bot_application_url
 from config import get_settings
 from database import repositories as repo
 from database.models import Application
@@ -358,9 +358,11 @@ async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSes
 
 
 def channel_promo(app):
-    download_url=website_download_url(app.id)
+    from app.services.download_service import is_steamrip_application
+    download_url = (bot_application_url(app.id) if is_steamrip_application(app)
+                    else website_download_url(app.id))
     if not download_url:
-        raise ValueError("WEBSITE_URL_NOT_CONFIGURED")
+        raise ValueError("DOWNLOAD_URL_NOT_CONFIGURED")
     # Caption limit is 1024; Telegram text and captions are escaped before display.
     text=(f"📱 {bounded_html(app.name, 100)}\n📦 {bounded_html(app.version or '—', 40)}\n💾 {bounded_html(app.size or '—', 40)}\n\n"
         f"📝 {bounded_html(app.description, 250)}")
@@ -415,7 +417,9 @@ async def _publish_to_channel(call: CallbackQuery,session: AsyncSession,app) -> 
             await asyncio.wait_for(call.bot.delete_message(settings.CHANNEL_ID,message.message_id),10)
             await call.message.answer("تغيّر التطبيق أثناء النشر. أعد فتحه ثم حاول مجددًا.")
             return
-        await call.message.answer("📢 تم النشر. رابط التحميل داخل الرسالة يفتح Waleed Zone.")
+        from app.services.download_service import is_steamrip_application
+        destination_name = "البوت" if is_steamrip_application(app) else "Waleed Zone"
+        await call.message.answer(f"📢 تم النشر. رابط التحميل داخل الرسالة يفتح {destination_name}.")
     except Exception:
         await session.rollback()
         logger.warning("Channel promo unavailable application_id=%s",app_id)
