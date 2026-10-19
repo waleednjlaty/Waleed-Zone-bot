@@ -50,12 +50,11 @@ HELP_TEXT = (
     "⬅️ اضغط على «العودة» للرجوع إلى القائمة الرئيسية."
 )
 
-
 @router.message(CommandStart(), F.chat.type == "private")
-async def on_start(message: Message, session: AsyncSession,bot:Bot) -> None:
-    if not await require_subscription(message,bot):
+async def on_start(message: Message, session: AsyncSession, bot: Bot) -> None:
+    if not await require_subscription(message, bot):
         return
-    """بداية البوت — يدعم deep link: t.me/BOT?start=app_123"""
+    """بداية البوت — يدعم deep link: t.me/BOT?start=app_123 أو dl_TOKEN"""
     user = message.from_user
     if user is None:
         return
@@ -71,6 +70,36 @@ async def on_start(message: Message, session: AsyncSession,bot:Bot) -> None:
     args = (message.text or "").split(maxsplit=1)
     deep = args[1] if len(args) > 1 else ""
 
+    # معالجة العودة من التحقق عبر الويب (Deep Link للتحميل)
+    if deep.startswith("dl_"):
+        token = deep.replace("dl_", "", 1)
+        pending_record = await repo.get_pending_download_by_token(session, token)
+
+        if not pending_record:
+            await message.answer("❌ رابط الطلب غير صالح أو منتهي الصلاحية.")
+            return
+
+        if pending_record.status == "resolved" and pending_record.download_url:
+            # جلب تفاصيل اللعبة لعرض رسالة التحميل بشكل منظم
+            app = await repo.get_application(session, pending_record.app_id)
+            app_name = app.name if app else "اللعبة المطلوبة"
+            
+            await message.answer(
+                f"✅ **تم تجاوز التحقق بنجاح وتجهيز الرابط للعبة:** `{app_name}`\n\n"
+                f"🔗 **رابط التحميل المباشر:**\n{pending_record.download_url}",
+                parse_mode="Markdown",
+            )
+        elif pending_record.status == "pending":
+            web_url = f"https://waleed-zone.up.railway.app/download/{pending_record.app_id}?token={token}"
+            await message.answer(
+                "⚠️ **لم يتم تأكيد اجتياز التحقق في المتصفح بعد.**\n\n"
+                "يرجى فتح الرابط التالي في المتصفح لإتمام التحقق ثم الضغط على زر العودة هنا مرة أخرى:\n"
+                f"{web_url}"
+            )
+        else:
+            await message.answer("❌ تعذر العثور على الرابط المطلوب. حاول إعادة المحاولة من القائمة.")
+        return
+
     if deep.startswith("app_"):
         try:
             app_id = int(deep.split("_", 1)[1])
@@ -84,7 +113,6 @@ async def on_start(message: Message, session: AsyncSession,bot:Bot) -> None:
         WELCOME_TEXT,
         reply_markup=main_menu_keyboard(is_admin_user=is_admin(user.id)),
     )
-
 
 @router.callback_query(MainMenuCB.filter(F.action == "main"))
 async def on_main_menu(call: CallbackQuery, bot: Bot) -> None:

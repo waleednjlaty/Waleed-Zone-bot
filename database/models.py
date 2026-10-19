@@ -214,3 +214,24 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, default=None)
+class PendingDownload(Base):
+    __tablename__ = "pending_downloads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.telegram_id"), index=True
+    )
+    app_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("applications.id"), index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", index=True
+    )  # pending / resolved / failed
+    download_url: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )

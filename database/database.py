@@ -69,6 +69,7 @@ class Database:
                 # Production schema is operator-managed. Never run migrations on startup.
                 await conn.execute(text("SELECT revision FROM applications LIMIT 0"))
                 await conn.execute(text("SELECT application_id FROM site_delivery_sources LIMIT 0"))
+                await conn.execute(text("SELECT token FROM pending_downloads LIMIT 0"))
         logger.info("Database schema ready.")
 
     async def close(self) -> None:

@@ -6,9 +6,12 @@ before using the result. No signed destination is stored in the catalog.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
+import secrets
 from urllib.parse import urlsplit
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +21,8 @@ from database import repositories as repo
 from app.utils.website import website_download_url
 from integrations.public_http import public_url
 from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link, _is_bzzhr_url, ProviderResolutionError
+
+logger = logging.getLogger(__name__)
 
 _ACTIVE: set[tuple[int, int]] = set()
 
@@ -118,11 +123,45 @@ async def send_application_download(call, session: AsyncSession, application_id:
             await call.message.answer(text)
     except ProviderResolutionError as error:
         await session.rollback()
-        import logging
-        logging.getLogger(__name__).warning("download failed application_id=%s stage=%s host=%s status=%s category=%s",
+        logger.warning("download failed application_id=%s stage=%s host=%s status=%s category=%s",
             application_id, error.stage, error.host, error.status, error.code)
+        
+        # معالجة حماية المصدر (Cloudflare Challenge)
+        if error.code == "PROVIDER_CHALLENGE":
+            token = secrets.token_urlsafe(16)
+            try:
+                await repo.create_pending_download(
+                    session,
+                    token=token,
+                    user_id=call.from_user.id,
+                    app_id=application_id,
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                await call.message.answer("تعذر إنشاء رابط المعالجة. أعد المحاولة لاحقًا.")
+                return
+
+            web_url = f"https://waleed-zone.up.railway.app/download/{application_id}?token={token}"
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="🌐 تأكيد وتحضير التحميل عبر المتصفح",
+                            url=web_url,
+                        )
+                    ]
+                ]
+            )
+            msg_text = (
+                "⚠️ **المصدر يتطلب إثبات تحقق الأمان (Cloudflare).**\n\n"
+                "اضغط على الزر أدناه لتأكيد اجتياز التحقق في المتصفح، "
+                "وبعدها اضغط على زر العودة للتطبيق لتلقي رابط التحميل المباشر هنا فورًا:"
+            )
+            await call.message.answer(msg_text, reply_markup=kb, parse_mode="Markdown")
+            return
+
         messages = {
-            "PROVIDER_CHALLENGE": "المصدر يعرض صفحة تحقق. افتح صفحة التحميل في Waleed Zone ثم المصدر الأصلي عند الحاجة؛ لا يمكن نقل جلسة متصفحك إلى الخادم.",
             "SOURCE_REMOVED": "ملف المصدر محذوف أو لم يعد متاحًا.",
             "MISSING_HX_REDIRECT": "المصدر لم يُرجع رابط الملف بعد طلب التنزيل.",
             "FINAL_DESTINATION_NOT_FILE": "خادم المصدر أعاد صفحة بدل ملف قابل للتنزيل.",
@@ -133,9 +172,7 @@ async def send_application_download(call, session: AsyncSession, application_id:
         await call.message.answer("تعذر تجهيز الرابط حاليًا. قد يكون المصدر تغيّر؛ افتح صفحة التحميل في Waleed Zone أو أعد المحاولة لاحقًا.\n" + (website_download_url(application_id) or ""))
     except Exception:
         await session.rollback()
-        # Never log exception text: HTTP exceptions can contain signed endpoints.
-        import logging
-        logging.getLogger(__name__).warning("download failed application_id=%s category=unavailable", application_id)
+        logger.warning("download failed application_id=%s category=unavailable", application_id)
         await call.message.answer("تعذر تجهيز التحميل. أعد المحاولة بعد قليل.")
     finally:
         _ACTIVE.discard(key)

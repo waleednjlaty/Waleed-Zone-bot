@@ -19,6 +19,7 @@ from database.models import (
     Favorite,
     GroupLog,
     MemberWarning,
+    PendingDownload,
     SearchLog,
     Setting,
     User,
@@ -623,3 +624,42 @@ async def archive_application(session: AsyncSession, app_id: int) -> None:
         app.active = False
         app.published = False
         await session.flush()
+# --------------------------------------------------------------------------
+# Pending downloads
+# --------------------------------------------------------------------------
+async def create_pending_download(
+    session: AsyncSession, *, token: str, user_id: int, app_id: int
+) -> PendingDownload:
+    """إنشاء سجل جديد لطلب تحميل معلق يتطلب اجتياز التحقق."""
+    pending = PendingDownload(
+        token=token,
+        user_id=user_id,
+        app_id=app_id,
+        status="pending",
+    )
+    session.add(pending)
+    await session.flush()
+    return pending
+
+
+async def get_pending_download_by_token(
+    session: AsyncSession, token: str
+) -> PendingDownload | None:
+    """جلب سجل طلب التحميل باستخدام الـ Token."""
+    return await session.scalar(
+        select(PendingDownload).where(PendingDownload.token == token)
+    )
+
+
+async def resolve_pending_download(
+    session: AsyncSession, token: str, download_url: str
+) -> PendingDownload | None:
+    """تحديث حالة طلب التحميل إلى جاهز (resolved) وحفظ رابط التنزيل المباشر."""
+    pending = await get_pending_download_by_token(session, token)
+    if pending is None:
+        return None
+    pending.status = "resolved"
+    pending.download_url = download_url
+    pending.resolved_at = datetime.now(timezone.utc)
+    await session.flush()
+    return pending
