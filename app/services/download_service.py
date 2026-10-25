@@ -142,15 +142,20 @@ async def send_application_download(call, session: AsyncSession, application_id:
                 await call.message.answer("تعذر إنشاء رابط المعالجة. أعد المحاولة لاحقًا.")
                 return
 
-            web_url = f"https://waleed-zone.up.railway.app/download/{application_id}?token={token}"
+            web_base = website_download_url(application_id)
+            if not web_base:
+                await call.message.answer("تعذر إنشاء رابط المعالجة. أعد المحاولة لاحقًا.")
+                return
+            web_url = f"{web_base}?token={token}"
+            try:
+                bot_username = (await call.bot.get_me()).username or "Waleedzone_bot"
+            except Exception:
+                bot_username = "Waleedzone_bot"
+            return_url = f"https://t.me/{bot_username}?start=dl_{token}"
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="🌐 تأكيد وتحضير التحميل عبر المتصفح",
-                            url=web_url,
-                        )
-                    ]
+                    [InlineKeyboardButton(text="🌐 تأكيد وتحضير التحميل عبر المتصفح", url=web_url)],
+                    [InlineKeyboardButton(text="↩️ العودة إلى Telegram لاستلام الرابط", url=return_url)],
                 ]
             )
             msg_text = (
