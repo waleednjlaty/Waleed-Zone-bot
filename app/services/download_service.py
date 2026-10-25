@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import secrets
 from urllib.parse import urlsplit
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -126,39 +125,36 @@ async def send_application_download(call, session: AsyncSession, application_id:
         logger.warning("download failed application_id=%s stage=%s host=%s status=%s category=%s",
             application_id, error.stage, error.host, error.status, error.code)
         
-        # معالجة حماية المصدر (Cloudflare Challenge)
+        # Cloudflare challenges must be completed by the user in their browser.
+        # The website download page does not consume pending-download tokens or send
+        # a solved provider URL back to this bot, so do not create an orphaned token
+        # or promise an automatic return path that is not implemented.
         if error.code == "PROVIDER_CHALLENGE":
-            token = secrets.token_urlsafe(16)
-            try:
-                await repo.create_pending_download(
-                    session,
-                    token=token,
-                    user_id=call.from_user.id,
-                    app_id=application_id,
+            web_url = website_download_url(application_id)
+            if not web_url:
+                await call.message.answer(
+                    "⚠️ المصدر يتطلب تحققًا بشريًا (Cloudflare)، وتعذر تكوين رابط الموقع. "
+                    "أعد المحاولة لاحقًا."
                 )
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                await call.message.answer("تعذر إنشاء رابط المعالجة. أعد المحاولة لاحقًا.")
                 return
 
-            web_url = f"https://waleed-zone.up.railway.app/download/{application_id}?token={token}"
             kb = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="🌐 تأكيد وتحضير التحميل عبر المتصفح",
+                            text="🌐 فتح صفحة التحميل بالموقع",
                             url=web_url,
                         )
                     ]
                 ]
             )
             msg_text = (
-                "⚠️ **المصدر يتطلب إثبات تحقق الأمان (Cloudflare).**\n\n"
-                "اضغط على الزر أدناه لتأكيد اجتياز التحقق في المتصفح، "
-                "وبعدها اضغط على زر العودة للتطبيق لتلقي رابط التحميل المباشر هنا فورًا:"
+                "⚠️ رفض المصدر معالجة الطلب آليًا وطلب تحققًا بشريًا (Cloudflare).\n\n"
+                "افتح صفحة التحميل بالموقع. إذا استمر الرفض، ستجد زرًا لفتح صفحة المصدر "
+                "وتنزيل الملف من متصفحك.\n\n"
+                "ملاحظة: إكمال التحقق في موقع المصدر لا يعيد رابط الملف إلى البوت تلقائيًا."
             )
-            await call.message.answer(msg_text, reply_markup=kb, parse_mode="Markdown")
+            await call.message.answer(msg_text, reply_markup=kb)
             return
 
         messages = {
