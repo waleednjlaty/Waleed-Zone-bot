@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandStart, Command  # تمت إضافة Command هنا
@@ -20,6 +21,7 @@ from app.keyboards.user import (
 )
 from app.middlewares import is_subscribed
 from app.utils.constants import MainMenuCB, NotifCB
+from app.utils.website import website_download_url
 from app.utils.helpers import is_admin
 from config import get_settings
 from database import repositories as repo
@@ -72,11 +74,21 @@ async def on_start(message: Message, session: AsyncSession, bot: Bot) -> None:
 
     # معالجة العودة من التحقق عبر الويب (Deep Link للتحميل)
     if deep.startswith("dl_"):
-        token = deep.replace("dl_", "", 1)
+        token = deep[3:]
+        if not token or len(token) > 64 or not token.replace("-", "").replace("_", "").isalnum():
+            await message.answer("❌ رابط الطلب غير صالح أو منتهي الصلاحية.")
+            return
         pending_record = await repo.get_pending_download_by_token(session, token)
 
-        if not pending_record:
+        if not pending_record or pending_record.user_id != user.id:
             await message.answer("❌ رابط الطلب غير صالح أو منتهي الصلاحية.")
+            return
+
+        created_at = pending_record.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - created_at > timedelta(minutes=20):
+            await message.answer("⌛ انتهت صلاحية طلب التحميل. ابدأ طلبًا جديدًا من البوت.")
             return
 
         if pending_record.status == "resolved" and pending_record.download_url:
@@ -90,10 +102,14 @@ async def on_start(message: Message, session: AsyncSession, bot: Bot) -> None:
                 parse_mode="Markdown",
             )
         elif pending_record.status == "pending":
-            web_url = f"https://waleed-zone.up.railway.app/download/{pending_record.app_id}?token={token}"
+            web_base = website_download_url(pending_record.app_id)
+            if not web_base:
+                await message.answer("تعذر إنشاء رابط الموقع. أعد المحاولة من البوت.")
+                return
+            web_url = f"{web_base}?token={token}"
             await message.answer(
-                "⚠️ **لم يتم تأكيد اجتياز التحقق في المتصفح بعد.**\n\n"
-                "يرجى فتح الرابط التالي في المتصفح لإتمام التحقق ثم الضغط على زر العودة هنا مرة أخرى:\n"
+                "⚠️ **لم يتم تجهيز الرابط في المتصفح بعد.**\n\n"
+                "افتح الرابط، أكمل التجهيز، ثم اضغط على زر العودة إلى Telegram لاستلام الرابط:\n"
                 f"{web_url}"
             )
         else:
