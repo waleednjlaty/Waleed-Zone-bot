@@ -15,6 +15,7 @@ from app.handlers import (
     group,
     manual_game,
     requests,
+    release_review,
     search,
     start,
     upload,
@@ -59,4 +60,5 @@ def register_all_routers(dp: Dispatcher) -> None:
     dp.include_router(requests.router)
     dp.include_router(upload.router)
     dp.include_router(admin.router)
+    dp.include_router(release_review.router)
     dp.include_router(group.router)
