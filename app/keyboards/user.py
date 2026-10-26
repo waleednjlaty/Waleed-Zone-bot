@@ -164,8 +164,13 @@ def app_detail_keyboard(
         )],
     ]
     if releases and len(releases) > 1:
+        visible_releases = list(releases[:8])
+        if not any(release.id == app_id for release in visible_releases):
+            selected = next((release for release in releases if release.id == app_id), None)
+            if selected is not None:
+                visible_releases.append(selected)
         release_row: list[InlineKeyboardButton] = []
-        for release in releases[:8]:
+        for release in visible_releases:
             version = str(release.version or "إصدار غير محدد").strip()[:24]
             platform = str(release.platform or "").strip()[:12]
             label = ("✅ " if release.id == app_id else "📦 ") + version
