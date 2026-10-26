@@ -38,7 +38,7 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     for app in apps:
         kb.append(
             [_button(
-                text=f"{'🚫 ' if not app.active else ''}📱 {app.name}",
+                text=f"{'🚫 ' if not app.active else ''}📱 {app.name} · {app.version or '—'} · {app.platform or 'نظام غير محدد'}",
                 callback_data=AdminCB(action="app_manage", app_id=app.id, page=page).pack(),
             )]
         )
@@ -87,6 +87,7 @@ def app_manage_keyboard(
             ),
         ],
     ]
+    kb.append([InlineKeyboardButton(text="🧾 سجل الإصدارات", callback_data=AdminCB(action="app_versions", app_id=app_id, page=page).pack())])
     kb.append([InlineKeyboardButton(text="📎 ربط ملف Telegram", callback_data=AdminCB(action="attach_file", app_id=app_id, page=page).pack())])
     if website_url:
         kb.append([InlineKeyboardButton(text="🌐 فتح في Waleed Zone", url=website_url)])
