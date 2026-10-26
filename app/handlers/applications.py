@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.handlers.common import show_app
 from app.keyboards.user import (
+    _steamrip_page_url,
     app_detail_keyboard,
     apps_list_keyboard,
     back_to_menu_keyboard,
@@ -156,7 +157,7 @@ async def on_toggle_favorite(call: CallbackQuery, callback_data: AppCB, session:
         await repo.remove_favorite(session, call.from_user.id, app.id)
         msg = "💔 أُزيل من المفضلة"
     await call.answer(msg)
-    kb = app_detail_keyboard(app.id, is_fav=callback_data.action == "fav")
+    kb = app_detail_keyboard(app.id, is_fav=callback_data.action == "fav", steamrip_url=app.devupload_url)
     releases = await repo.list_application_versions(session, app.id)
     if len(releases) > 1:
         kb.inline_keyboard.insert(1, [InlineKeyboardButton(text="📚 الإصدارات السابقة", callback_data=AppCB(action="versions", app_id=app.id).pack())])
