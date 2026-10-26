@@ -22,12 +22,14 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.keyboards.admin import admin_panel_keyboard
-from app.services.upload_service import files_channel
-from app.states import RemoteImportStates
+from app.services.upload_service import files_channel, validate_source
+from app.states import RemoteImportStates, UploadStates
 from app.utils.constants import AdminCB
-from app.utils.helpers import is_admin
+from app.utils.helpers import format_size, is_admin
 from app.utils.owner_guard import owner_gate
 from app.utils.text import append_app_footer, bounded_html, escape_html
+from app.utils.versions import latest_per_family, sort_application_versions
+from database import repositories as repo
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -141,6 +143,84 @@ async def on_remote_import_cancel(call: CallbackQuery, state) -> None:
         await call.message.edit_text("⚙️ لوحة الإدارة\nاختر ما تريد القيام به:", reply_markup=admin_panel_keyboard())
 
 
+@router.callback_query(AdminCB.filter(F.action == "remote_import_done"))
+async def on_remote_import_done(call: CallbackQuery, state) -> None:
+    if not await owner_gate(call):
+        return
+    if not call.from_user or not is_admin(call.from_user.id):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    await state.clear()
+    await call.answer("انتهى الاستيراد")
+    if call.message is not None and hasattr(call.message, "edit_text"):
+        await call.message.edit_text("✅ تم حفظ الملف في قناة Telegram. لم يُربط بأي تطبيق.")
+
+
+@router.callback_query(AdminCB.filter(F.action == "remote_import_attach"))
+async def on_remote_import_attach(call: CallbackQuery, state, session) -> None:
+    if not await owner_gate(call):
+        return
+    if not call.from_user or not is_admin(call.from_user.id):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    data = await state.get_data()
+    if not data.get("remote_source"):
+        await call.answer("انتهت صلاحية الملف. أعد استيراده.", show_alert=True)
+        return
+    apps = await repo.list_applications(session, active_only=True, public_only=False, limit=1000)
+    apps = sort_application_versions(latest_per_family(apps))
+    rows = []
+    for app in apps[:80]:
+        rows.append([InlineKeyboardButton(
+            text=f"{str(app.name or 'تطبيق')[:24]} · {str(app.version or '؟')[:12]} · {str(app.platform or '؟')[:10]}",
+            callback_data=AdminCB(action="remote_import_select", app_id=app.id, page=0).pack(),
+        )])
+    rows.append([InlineKeyboardButton(text="❌ إلغاء", callback_data=AdminCB(action="remote_import_done", page=0).pack())])
+    await call.answer()
+    await call.message.edit_text(
+        f"اختر التطبيق الذي تريد إضافة الملف كتحديث له: {escape_html(str(data.get('remote_filename') or 'الملف'))}",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(AdminCB.filter(F.action == "remote_import_select"))
+async def on_remote_import_select(call: CallbackQuery, callback_data: AdminCB, state, session) -> None:
+    if not await owner_gate(call):
+        return
+    if not call.from_user or not is_admin(call.from_user.id):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    data = await state.get_data()
+    source = data.get("remote_source")
+    app = await repo.get_application(session, callback_data.app_id)
+    if not isinstance(source, dict) or not app or not app.active:
+        await call.answer("انتهت صلاحية الملف أو التطبيق غير متاح.", show_alert=True)
+        return
+    await state.update_data(
+        release_from_app_id=app.id,
+        release_base_revision=app.revision,
+        name=app.name,
+        description=app.description or "",
+        platform=app.platform or "",
+        category=app.category or "",
+        developer=app.developer or "",
+        icon_file_id=app.icon_file_id,
+        image_url=app.image_url,
+        source=source,
+        size=format_size(int(data.get("remote_size") or source.get("size_bytes") or 0)),
+        manual_external=False,
+        release_match_confirmed=True,
+    )
+    await state.set_state(UploadStates.waiting_version)
+    await call.answer("تم اختيار التطبيق")
+    await call.message.edit_text(
+        f"🆕 إضافة تحديث لـ {escape_html(app.name)}\n"
+        f"الإصدار الحالي: {escape_html(app.version or 'غير محدد')} · {escape_html(app.platform or 'نظام غير محدد')}\n"
+        f"الملف: {escape_html(str(data.get('remote_filename') or 'الملف'))}\n\n"
+        "أرسل رقم الإصدار الجديد (مثال: 19.8.0). سيبقى الملف القديم كما هو."
+    )
+
+
 @router.message(RemoteImportStates.waiting_url)
 async def on_remote_import_url(message: Message, state) -> None:
     if not await owner_gate(message):
@@ -190,13 +270,28 @@ async def on_remote_import_url(message: Message, state) -> None:
                 disable_notification=True,
             ), timeout=90)
             link = f"https://t.me/{username}/{sent.message_id}"
+            source = {
+                "telegram_chat_id": chat.id,
+                "telegram_message_id": sent.message_id,
+                "telegram_channel_username": username,
+                "telegram_file_id": sent.document.file_id if sent.document else None,
+                "filename": filename,
+                "size_bytes": sent.document.file_size if sent.document and sent.document.file_size else size,
+                "mime_type": sent.document.mime_type if sent.document else None,
+            }
+            validate_source(source)
             await state.clear()
+            await state.update_data(remote_source=source, remote_filename=filename, remote_size=size)
             await status.edit_text(
                 "✅ تم تنزيل الملف ورفعه إلى قناة الملفات في Telegram.\n"
                 f"📄 {escape_html(filename)}\n"
                 f"💾 {size / (1024 * 1024):.2f} MB\n"
                 f"🔗 {escape_html(link)}\n\n"
-                "لم يُحفظ الملف على قرص دائم في Railway."
+                "لم يُحفظ الملف على قرص دائم في Railway. هل تريد استخدامه كتحديث لتطبيق موجود؟",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🆕 إضافة هذا الملف كتحديث", callback_data=AdminCB(action="remote_import_attach", page=0).pack())],
+                    [InlineKeyboardButton(text="🏁 إنهاء", callback_data=AdminCB(action="remote_import_done", page=0).pack())],
+                ]),
             )
     except asyncio.TimeoutError:
         await status.edit_text("❌ انتهت مهلة التنزيل أو الرفع. جرّب رابطًا مباشرًا أصغر.")
