@@ -11,6 +11,7 @@ class UploadStates(StatesGroup):
     waiting_version = State()
     waiting_size = State()
     waiting_platform = State()
+    waiting_match_confirmation = State()
     waiting_category = State()
     waiting_developer = State()
     waiting_icon = State()
