@@ -224,7 +224,6 @@ async def search_applications(
             (Application.search_text.ilike(q) | Application.name.ilike(q) | Application.description.ilike(q)),
         )
         .order_by(Application.downloads.desc(), Application.created_at.desc(), Application.id.desc())
-        .limit(max(limit * 20, 100))
     )
     rows = list((await session.scalars(stmt)).all())
     return latest_per_family(rows)[:limit]
