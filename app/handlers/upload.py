@@ -312,8 +312,20 @@ async def on_size(message: Message, state: FSMContext):
 
 
 @router.message(UploadStates.waiting_platform)
-async def on_platform(message: Message,state: FSMContext):
+async def on_platform(message: Message,state: FSMContext,session: AsyncSession):
     if not await owner_gate(message):
+        return
+    platform = (message.text or "").strip()
+    data = await state.get_data()
+    name = str(data.get("name") or "").strip()
+    version = str(data.get("version") or "").strip()
+    if platform and name and version and await repo.application_version_exists(
+        session, name=name, platform=platform, version=version
+    ):
+        await message.answer(
+            "❌ هذا الاسم والنظام ورقم الإصدار موجودة مسبقًا. لن أُنشئ نسخة مكررة. "
+            "عدّل الاسم أو الإصدار، أو ألغِ العملية إذا كنت تقصد سجلًا موجودًا."
+        )
         return
     await _collect(message,state,"platform",UploadStates.waiting_category,"أرسل التصنيف (تطبيقات / ألعاب موبايل / ألعاب كمبيوتر…):",50)
 
@@ -415,6 +427,9 @@ async def on_icon(message: Message,state: FSMContext,session: AsyncSession):
 async def on_release_match_selected(call: CallbackQuery, state: FSMContext, session: AsyncSession):
     if not await owner_gate(call):
         return
+    if not _only_admin(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
     try:
         app_id = int(call.data.rsplit(":", 1)[1])
     except (ValueError, AttributeError):
@@ -449,6 +464,9 @@ async def on_release_match_selected(call: CallbackQuery, state: FSMContext, sess
 async def on_release_matches_back(call: CallbackQuery, state: FSMContext, session: AsyncSession):
     if not await owner_gate(call):
         return
+    if not _only_admin(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
     data = await state.get_data()
     ids = data.get("release_match_candidates", [])
     candidates = []
@@ -468,6 +486,9 @@ async def on_release_matches_back(call: CallbackQuery, state: FSMContext, sessio
 @router.callback_query(F.data.startswith("upl:confirm:"), UploadStates.waiting_publish_choice)
 async def on_release_match_confirm(call: CallbackQuery, state: FSMContext, session: AsyncSession):
     if not await owner_gate(call):
+        return
+    if not _only_admin(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
     try:
         app_id = int(call.data.rsplit(":", 1)[1])
@@ -502,6 +523,9 @@ async def on_release_match_confirm(call: CallbackQuery, state: FSMContext, sessi
 @router.callback_query(F.data == "upl:new", UploadStates.waiting_publish_choice)
 async def on_release_new_app(call: CallbackQuery, state: FSMContext):
     if not await owner_gate(call):
+        return
+    if not _only_admin(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
         return
     await state.update_data(pending_release_match_id=None, release_match_confirmed=False)
     await call.answer("سيُعامل كتطبيق جديد")
