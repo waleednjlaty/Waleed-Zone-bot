@@ -23,7 +23,7 @@ from app.utils.catalog import (
     app_matches_category,
     visible_categories,
 )
-from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB, MainMenuCB
+from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB
 from app.utils.helpers import paginate
 from app.utils.versions import latest_per_family, sort_application_versions
 from app.utils.text import escape_html
@@ -113,8 +113,8 @@ async def on_open_app(call: CallbackQuery, callback_data: AppCB, session: AsyncS
 
 @router.callback_query(AppCB.filter(F.action == "versions"))
 async def on_previous_versions(call: CallbackQuery, callback_data: AppCB, session: AsyncSession) -> None:
-    if not await call.message:
-        await call.answer()
+    if call.message is None or not hasattr(call.message, "edit_text"):
+        await call.answer("تعذر فتح سجل الإصدارات.", show_alert=True)
         return
     releases = sort_application_versions(await repo.list_application_versions(session, callback_data.app_id))
     if len(releases) < 2:
@@ -128,7 +128,7 @@ async def on_previous_versions(call: CallbackQuery, callback_data: AppCB, sessio
         if platform:
             label += f" · {platform}"
         rows.append([InlineKeyboardButton(text=label[:60], callback_data=AppCB(action="open", app_id=release.id).pack())])
-    rows.append([InlineKeyboardButton(text="⬅️ العودة للتطبيق", callback_data=AppCB(action="open", app_id=releases[0].id).pack())])
+    rows.append([InlineKeyboardButton(text="⬅️ العودة للتطبيق", callback_data=AppCB(action="open", app_id=callback_data.app_id).pack())])
     await call.answer()
     await call.message.edit_text(
         f"📚 إصدارات {escape_html(releases[0].name or 'التطبيق')}\n"
