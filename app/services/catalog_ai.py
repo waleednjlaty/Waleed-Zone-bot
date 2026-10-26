@@ -31,7 +31,7 @@ def _normalize_root(value: object) -> str:
     return _normalize_title(root_application_name(value))
 
 
-def _platform(value: object) -> str:
+def normalizenormalize_platform(value: object) -> str:
     raw = _normalize_title(value)
     if not raw:
         return "unspecified"
@@ -89,7 +89,7 @@ def heuristic_release_groups(apps: list[object]) -> list[dict[str, Any]]:
         left_full = _normalize_title(left_name)
         left_root = _normalize_root(left_name)
         for right in rows[index + 1:]:
-            if _platform(getattr(left, "platform", None)) != _platform(getattr(right, "platform", None)):
+            if normalize_platform(getattr(left, "platform", None)) != normalize_platform(getattr(right, "platform", None)):
                 continue
             right_id = int(getattr(right, "id"))
             right_name = str(getattr(right, "name", "") or "")
@@ -151,7 +151,7 @@ def _validate_ai_groups(raw: object, apps: list[object]) -> list[dict[str, Any]]
         if len(set(ids)) != len(ids) or any(value in claimed or value not in by_id for value in ids):
             continue
         selected = [by_id[value] for value in ids]
-        if len({_platform(getattr(app, "platform", None)) for app in selected}) != 1:
+        if len({normalize_platform(getattr(app, "platform", None)) for app in selected}) != 1:
             continue
         proposed = root_application_name(item.get("canonical_name", ""))
         if not proposed or len(proposed) > 255:
