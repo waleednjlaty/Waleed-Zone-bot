@@ -24,6 +24,7 @@ from app.states import UploadStates
 from app.utils.constants import AdminCB, AppCB, MainMenuCB
 from app.utils.helpers import build_search_text, format_size, is_admin
 from app.utils.owner_guard import owner_gate
+from app.utils.release_assistant import suggest_application_families
 from app.utils.text import append_app_footer, bounded_html, download_link_block, escape_html
 from app.utils.website import website_download_url
 from config import get_settings
@@ -365,7 +366,7 @@ async def _prompt_publish_choice(message: Message, state: FSMContext) -> None:
 
 
 @router.message(UploadStates.waiting_icon)
-async def on_icon(message: Message,state: FSMContext):
+async def on_icon(message: Message,state: FSMContext,session: AsyncSession):
     if not await owner_gate(message):
         return
     photo=message.photo[-1].file_id if message.photo else None
@@ -376,8 +377,136 @@ async def on_icon(message: Message,state: FSMContext):
         await message.answer("أرسل صورة أو /skip.")
         return
     await state.update_data(icon_file_id=photo,image_url=image_url)
+    data = await state.get_data()
+    try:
+        candidates = await repo.list_applications(session, active_only=True, public_only=False, limit=500)
+        suggestions = await suggest_application_families(
+            str(data.get("name") or ""), str(data.get("version") or ""),
+            str(data.get("platform") or ""), candidates,
+        )
+    except Exception:
+        # Suggestions are advisory only. A matching-service failure must not block upload.
+        suggestions = {"provider": "similarity", "items": []}
+    items = suggestions.get("items", [])
+    if items:
+        await state.update_data(release_match_candidates=[int(item["id"]) for item in items])
+        rows = []
+        for item in items[:5]:
+            label = f"{str(item['name'])[:24]} · {str(item.get('version') or '؟')[:12]} · {str(item.get('platform') or '؟')[:10]}"
+            rows.append([InlineKeyboardButton(
+                text=label,
+                callback_data=f"upl:match:{int(item['id'])}",
+            )])
+        rows.append([InlineKeyboardButton(text="➕ لا، تطبيق جديد", callback_data="upl:new")])
+        provider_label = "ذكاء اصطناعي" if suggestions.get("provider") == "openai" else "مطابقة أسماء"
+        await message.answer(
+            "🧠 فحصت المكتبة عبر " + provider_label + "، ووجدت احتمالات للتطبيق نفسه.\n"
+            f"الاسم: {escape_html(str(data.get('name') or ''))}\n"
+            f"الإصدار الجديد: {escape_html(str(data.get('version') or ''))} · {escape_html(str(data.get('platform') or ''))}\n\n"
+            "اختر التطبيق الصحيح إن كان تحديثًا له، أو اضغط «لا، تطبيق جديد». لن يُحفظ أي شيء قبل اختيارك ثم تأكيد الحفظ.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+        return
     await state.set_state(UploadStates.waiting_publish_choice)
     await _prompt_publish_choice(message, state)
+
+
+@router.callback_query(F.data.startswith("upl:match:"), UploadStates.waiting_publish_choice)
+async def on_release_match_selected(call: CallbackQuery, state: FSMContext, session: AsyncSession):
+    if not await owner_gate(call):
+        return
+    try:
+        app_id = int(call.data.rsplit(":", 1)[1])
+    except (ValueError, AttributeError):
+        await call.answer("اختيار غير صالح.", show_alert=True)
+        return
+    data = await state.get_data()
+    if app_id not in data.get("release_match_candidates", []):
+        await call.answer("انتهت صلاحية الاقتراح. أعد محاولة الإضافة.", show_alert=True)
+        return
+    app = await repo.get_application(session, app_id)
+    if not app or not app.active:
+        await call.answer("التطبيق لم يعد متاحًا. اختر تطبيقًا آخر.", show_alert=True)
+        return
+    await state.update_data(pending_release_match_id=app.id)
+    await call.answer()
+    rows = [
+        [InlineKeyboardButton(text="✅ نعم، هذا نفس التطبيق", callback_data=f"upl:confirm:{app.id}")],
+        [InlineKeyboardButton(text="↩️ رجوع للاقتراحات", callback_data="upl:matches_back")],
+        [InlineKeyboardButton(text="➕ لا، تطبيق جديد", callback_data="upl:new")],
+    ]
+    await call.message.edit_text(
+        "هل تقصد هذا التطبيق فعلًا؟\n\n"
+        f"الاسم المسجّل: {escape_html(app.name)}\n"
+        f"آخر إصدار مسجّل: {escape_html(app.version or 'غير محدد')}\n"
+        f"النظام: {escape_html(app.platform or 'غير محدد')}\n\n"
+        "إذا وافقت، سيُنشأ سجل إصدار جديد بهذا الاسم والنظام، وسيبقى الإصدار القديم وملفه ورابطه كما هي.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data == "upl:matches_back", UploadStates.waiting_publish_choice)
+async def on_release_matches_back(call: CallbackQuery, state: FSMContext, session: AsyncSession):
+    if not await owner_gate(call):
+        return
+    data = await state.get_data()
+    ids = data.get("release_match_candidates", [])
+    candidates = []
+    for app_id in ids[:5]:
+        app = await repo.get_application(session, app_id)
+        if app and app.active:
+            candidates.append(app)
+    rows = [[InlineKeyboardButton(
+        text=f"{app.name[:24]} · {(app.version or '؟')[:12]} · {(app.platform or '؟')[:10]}",
+        callback_data=f"upl:match:{app.id}",
+    )] for app in candidates]
+    rows.append([InlineKeyboardButton(text="➕ لا، تطبيق جديد", callback_data="upl:new")])
+    await call.answer()
+    await call.message.edit_text("اختر التطبيق الذي تقصده:", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+@router.callback_query(F.data.startswith("upl:confirm:"), UploadStates.waiting_publish_choice)
+async def on_release_match_confirm(call: CallbackQuery, state: FSMContext, session: AsyncSession):
+    if not await owner_gate(call):
+        return
+    try:
+        app_id = int(call.data.rsplit(":", 1)[1])
+    except (ValueError, AttributeError):
+        await call.answer("اختيار غير صالح.", show_alert=True)
+        return
+    data = await state.get_data()
+    if data.get("pending_release_match_id") != app_id:
+        await call.answer("انتهت صلاحية التأكيد. اختر التطبيق من جديد.", show_alert=True)
+        return
+    app = await repo.get_application(session, app_id)
+    if not app or not app.active:
+        await call.answer("التطبيق لم يعد متاحًا.", show_alert=True)
+        return
+    version = str(data.get("version") or "").strip()
+    if await repo.application_version_exists(session, name=app.name, platform=app.platform, version=version):
+        await call.answer("هذا الإصدار موجود مسبقًا. لن يتم إنشاء تكرار.", show_alert=True)
+        await state.update_data(name=app.name, platform=app.platform)
+        await state.set_state(UploadStates.waiting_version)
+        await call.message.answer("أرسل رقم إصدار مختلفًا، أو ألغِ العملية. هذا الإصدار مسجّل بالفعل.")
+        return
+    await state.update_data(name=app.name, platform=app.platform, release_match_confirmed=True)
+    await call.answer("تم تأكيد هوية التطبيق")
+    await call.message.edit_text(
+        f"✅ تم تأكيد أنه تحديث لـ {escape_html(app.name)}.\n"
+        f"سيُسجّل الإصدار {escape_html(version)} تحت النظام {escape_html(app.platform or 'غير محدد')}.\n"
+        "الملف القديم ورابطه سيبقيان دون تغيير."
+    )
+    await _prompt_publish_choice(call.message, state)
+
+
+@router.callback_query(F.data == "upl:new", UploadStates.waiting_publish_choice)
+async def on_release_new_app(call: CallbackQuery, state: FSMContext):
+    if not await owner_gate(call):
+        return
+    await state.update_data(pending_release_match_id=None, release_match_confirmed=False)
+    await call.answer("سيُعامل كتطبيق جديد")
+    await call.message.edit_text("✅ سيتم تسجيله كتطبيق جديد مستقل.")
+    await _prompt_publish_choice(call.message, state)
 
 
 @router.callback_query(F.data.in_({"upl:save_draft","upl:save_site","upl:save_publish"}), UploadStates.waiting_publish_choice)
