@@ -14,6 +14,7 @@ from app.handlers import (
     applications,
     group,
     manual_game,
+    release_admin,
     requests,
     search,
     start,
@@ -36,21 +37,17 @@ async def _handle_telegram_bad_request(event: ErrorEvent) -> None:
     """تجاهل فقط خطأ Telegram الحميد عند محاولة إرسال نفس التعديل مرتين."""
     exc = event.exception
     message = str(exc).lower()
-
     if isinstance(exc, TelegramBadRequest) and "message is not modified" in message:
         logger.debug("Ignored harmless Telegram 'message is not modified' error")
         return
-
     raise exc
 
 
 def register_all_routers(dp: Dispatcher) -> None:
-    # يمنع ضغط نفس زر اللوحة مرتين من تلويث السجل بخطأ غير مؤثر.
     dp.errors.register(
         _handle_telegram_bad_request,
         ExceptionTypeFilter(TelegramBadRequest),
     )
-
     dp.include_router(start.router)
     dp.include_router(applications.router)
     dp.include_router(manual_game.router)
@@ -58,5 +55,6 @@ def register_all_routers(dp: Dispatcher) -> None:
     dp.include_router(search.router)
     dp.include_router(requests.router)
     dp.include_router(upload.router)
+    dp.include_router(release_admin.router)
     dp.include_router(admin.router)
     dp.include_router(group.router)
