@@ -31,7 +31,7 @@ def _normalize_root(value: object) -> str:
     return _normalize_title(root_application_name(value))
 
 
-def normalizenormalize_platform(value: object) -> str:
+def normalize_platform(value: object) -> str:
     raw = _normalize_title(value)
     if not raw:
         return "unspecified"
