@@ -194,7 +194,7 @@ async def list_by_category(
         .order_by(Application.created_at.desc(), Application.id.desc())
     )
     rows = list((await session.scalars(stmt)).all())
-    return latest_per_family(rows)[offset : offset + limit])
+    return latest_per_family(rows)[offset : offset + limit]
 
 
 async def list_categories(session: AsyncSession) -> list[str]:
