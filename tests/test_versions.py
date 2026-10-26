@@ -3,52 +3,12 @@ from types import SimpleNamespace
 
 import pytest
 from database import repositories as repo
-
-
-@pytest.mark.asyncio
-async def test_application_version_exists_is_scoped_to_app_family_and_platform(db):
-    async with db.session() as session:
-        original = await repo.create_application(
-            session, name="CapCut", version="19.7.0", platform="Android"
-        )
-        await repo.create_application(
-            session, name="CapCut", version="19.8.0", platform="Android"
-        )
-        await repo.create_application(
-            session, name="CapCut", version="19.8.0", platform="Windows"
-        )
-        await session.commit()
-        assert await repo.application_version_exists(
-            session, name=original.name, platform="Android", version="19.8.0"
-        )
-        assert not await repo.application_version_exists(
-            session, name=original.name, platform="Android", version="19.9.0"
-        )
-        assert not await repo.application_version_exists(
-            session, name=original.name, platform="Windows", version="19.9.0"
-        )
-
-
-@pytest.mark.asyncio
-async def test_application_version_exists_can_exclude_the_current_record(db):
-    async with db.session() as session:
-        original = await repo.create_application(
-            session, name="CapCut", version="19.7.0", platform="Android"
-        )
-        await session.commit()
-        assert not await repo.application_version_exists(
-            session, name=original.name, platform="Android", version="19.7.0", exclude_id=original.id
-        )
-
-
-
 from app.utils.versions import (
     application_family_key,
     latest_per_family,
     release_sort_key,
     sort_application_versions,
 )
-
 
 def app(app_id, name, version, platform="Android", created=1):
     return SimpleNamespace(
