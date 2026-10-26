@@ -22,6 +22,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
         [_button("🔗 إضافة لعبة برابط يدوي", AdminCB(action="add_manual_game").pack())],
         [_button("📱 إدارة التطبيقات", AdminCB(action="apps", page=0).pack()),
          _button("📥 طلبات التطبيقات", AdminCB(action="requests", page=0).pack())],
+        [_button("🤖 مراجعة الإصدارات بالذكاء الاصطناعي", AdminCB(action="release_review", page=0).pack())],
         [_button("📢 نشر في القناة", AdminCB(action="publish_select", page=0).pack()),
          _button("🖼 ترحيل الصور", AdminCB(action="migrate_images", page=0).pack())],
         [_button("👥 إدارة المجموعة", AdminCB(action="group", page=0).pack()),
@@ -56,6 +57,7 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
             _button("🔗 إضافة برابط", AdminCB(action="add_link_app", page=0).pack()),
         ]
     )
+    kb.append([_button("🤖 ترتيب الإصدارات المقترحة", AdminCB(action="release_review", page=0).pack())])
     kb.append([_button("🎮 إضافة من SteamRIP", AdminCB(action="add_rip_game", page=0).pack())])
     kb.append([_button("🔗 إضافة لعبة برابط يدوي", AdminCB(action="add_manual_game").pack())])
     kb.append(
