@@ -248,6 +248,20 @@ async def list_application_versions(session: AsyncSession, app_id: int) -> list[
     key = application_family_key(source)
     return sort_application_versions([app for app in rows if application_family_key(app) == key])
 
+async def application_version_exists(
+    session: AsyncSession, *, name: str, platform: str | None, version: str, exclude_id: int | None = None
+) -> bool:
+    """Prevent two rows with the same displayed version in one normalized app/OS family."""
+    target_key = application_family_key({"name": name, "platform": platform})
+    wanted = version.strip().casefold()
+    rows = list((await session.scalars(select(Application))).all())
+    return any(
+        app.id != exclude_id
+        and application_family_key(app) == target_key
+        and str(app.version or "").strip().casefold() == wanted
+        for app in rows
+    )
+
 async def update_application(session: AsyncSession, app: Application) -> None:
     await session.flush()
 
