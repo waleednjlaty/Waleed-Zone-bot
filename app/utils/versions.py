@@ -73,7 +73,7 @@ def release_sort_key(app: object) -> tuple:
     if not version:
         match = _EMBEDDED_VERSION.search(str(_value(app, "name") or ""))
         version = match.group(1) if match else ""
-    numeric = [int(part) for part in _VERSION_DIGITS.findall(version)[:12]]
+    core_version = re.split(r"[-+]", version, maxsplit=1)[0]\n    numeric = [int(part) for part in _VERSION_DIGITS.findall(core_version)[:12]]
     has_numeric = bool(numeric)
     numeric += [0] * (12 - len(numeric))
     stable = 0 if _PRERELEASE.search(version) else 1
