@@ -10,7 +10,6 @@ from typing import Iterable
 import aiohttp
 
 from app.utils.versions import (
-    application_family_key,
     latest_per_family,
     normalize_application_name,
     normalize_platform,
@@ -138,13 +137,7 @@ async def suggest_release_candidates(
     rows = latest_per_family(
         app for app in applications if getattr(app, "active", True) is True
     )
-    scored = [
-        (_score(name, platform, app), app)
-        for app in rows
-        if application_family_key(app)
-        == application_family_key({"name": getattr(app, "name", None), "platform": getattr(app, "platform", None)})
-    ]
-    # The key comparison above is deliberately identity-normalized; all rows remain isolated by OS.
+    scored = [(_score(name, platform, app), app) for app in rows]
     scored = [(score, app) for score, app in scored if score >= 0.30]
     scored.sort(key=lambda pair: (pair[0], str(getattr(pair[1], "version", "") or "")), reverse=True)
     candidates = [
