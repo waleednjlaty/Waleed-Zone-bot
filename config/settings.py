@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     # --- ImgBB (رفع الصور) ---
     IMGBB_API_KEY: str | None = Field(default=None,repr=False)
 
+    # Optional model access for admin-only release-family suggestions. No key is committed to source.
+    OPENAI_API_KEY: str | None = Field(default=None, repr=False)
+    CATALOG_AI_MODEL: str = "gpt-4o-mini"
+
     # --- قاعدة البيانات ---
     DATABASE_URL: str = Field(default=DEFAULT_DB_URL,repr=False)
 
