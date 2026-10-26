@@ -198,10 +198,28 @@ async def _collect(message, state, field, next_state, prompt, max_length):
 
 
 @router.message(UploadStates.waiting_name)
-async def on_name(message: Message,state: FSMContext):
+async def on_name(message: Message, state: FSMContext, session: AsyncSession):
     if not await owner_gate(message):
         return
-    await _collect(message,state,"name",UploadStates.waiting_description,"أرسل وصف التطبيق:",255)
+    value = (message.text or "").strip()
+    if not value or len(value) > 255 or any(ord(c) < 32 for c in value):
+        await message.answer("أرسل اسمًا صالحًا للتطبيق بين 1 و255 حرفًا.")
+        return
+
+    matches = await repo.find_application_families_by_name(session, value)
+    prompt = "أرسل وصف التطبيق:"
+    if matches:
+        releases = "، ".join(
+            f"{(app.version or 'إصدار غير محدد')[:30]} ({(app.platform or 'نظام غير محدد')[:20]})"
+            for app in matches[:5]
+        )
+        prompt += (
+            "\n\n♻️ وجدت تطبيقًا بهذا الاسم في المكتبة. إذا كنت تضيف تحديثًا، استخدم الاسم نفسه "
+            "والنظام نفسه وأدخل رقم الإصدار الجديد؛ سيظهر ضمن سجل إصدارات التطبيق.\n"
+            f"الإصدارات المسجلة حاليًا: {releases}\n"
+            "استخدم «إرفاق ملف» فقط عندما تريد استبدال ملف الإصدار الحالي."
+        )
+    await _collect(message, state, "name", UploadStates.waiting_description, prompt, 255)
 
 
 @router.message(UploadStates.waiting_description)
