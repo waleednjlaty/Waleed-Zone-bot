@@ -8,6 +8,7 @@ from typing import Iterable, TypeVar
 
 T = TypeVar("T")
 _VERSION_DIGITS = re.compile(r"\d+")
+_EMBEDDED_VERSION = re.compile(r"(?<!\w)v?(\d+(?:\.\d+){1,5}(?:[-+][\w.-]+)?)", re.IGNORECASE)
 _FILE_SUFFIX = re.compile(r"\.(apk|xapk|apks|aab|zip|exe|msi|dmg|ipa)$", re.IGNORECASE)
 _PRERELEASE = re.compile(r"\b(alpha|beta|rc|preview|pre[- ]?release|dev|nightly)\b|تجريبي", re.IGNORECASE)
 
@@ -21,8 +22,6 @@ def _value(app: object, field: str) -> object:
 def normalize_application_name(value: object) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).casefold()
     text = _FILE_SUFFIX.sub("", text)
-    # Catalogue indexes (e.g. "01 CAPCUT PRO") and embedded version labels
-    # are metadata, not part of the application family name.
     text = re.sub(r"^\s*#?\d{1,3}[\s.)_-]+(?=[^\W\d_])", "", text, count=1, flags=re.UNICODE)
     text = re.sub(r"(?:^|[\s_-])v?\d+(?:\.\d+){1,5}(?:[-+][\w.-]+)?(?=$|[\s_-])", " ", text, flags=re.IGNORECASE)
     text = text.replace("_", " ").casefold()
@@ -47,7 +46,6 @@ def normalize_platform(value: object) -> str:
 
 
 def application_family_key(app: object) -> str:
-    """Same normalized title and OS track is the same app's release family."""
     name = normalize_application_name(_value(app, "name"))
     if not name:
         return "id:" + str(_value(app, "id") or "")
@@ -70,8 +68,11 @@ def _timestamp(app: object) -> float:
 
 
 def release_sort_key(app: object) -> tuple:
-    """Comparable key; numerically sort versions (1.10 > 1.9), then stable/date/id."""
+    """Comparable key; numeric version beats title-date guesses (1.10 > 1.9)."""
     version = str(_value(app, "version") or "").strip()
+    if not version:
+        match = _EMBEDDED_VERSION.search(str(_value(app, "name") or ""))
+        version = match.group(1) if match else ""
     numeric = [int(part) for part in _VERSION_DIGITS.findall(version)[:12]]
     has_numeric = bool(numeric)
     numeric += [0] * (12 - len(numeric))
@@ -84,7 +85,7 @@ def release_sort_key(app: object) -> tuple:
 
 
 def latest_per_family(apps: Iterable[T]) -> list[T]:
-    """Keep the newest release in each family, preserving the first family position."""
+    """Keep the highest release in each family, preserving first family position."""
     items = list(apps)
     winners: dict[str, T] = {}
     for app in items:
