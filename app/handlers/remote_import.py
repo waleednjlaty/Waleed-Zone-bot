@@ -21,6 +21,7 @@ import httpx
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from app.keyboards.admin import admin_panel_keyboard
 from app.services.upload_service import files_channel
 from app.states import RemoteImportStates
 from app.utils.constants import AdminCB
@@ -122,9 +123,22 @@ async def on_remote_import_start(call: CallbackQuery, state) -> None:
         "الحد الأقصى 45 MB. لا تُقبل التحويلات أو صفحات تسجيل الدخول/التحدي. "
         "لن يُحفظ الملف على استضافة دائمة؛ سيُرفع إلى قناة ملفات Telegram.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="❌ إلغاء", callback_data=AdminCB(action="panel", page=0).pack())
+            InlineKeyboardButton(text="❌ إلغاء", callback_data=AdminCB(action="remote_import_cancel", page=0).pack())
         ]]),
     )
+
+
+@router.callback_query(AdminCB.filter(F.action == "remote_import_cancel"))
+async def on_remote_import_cancel(call: CallbackQuery, state) -> None:
+    if not await owner_gate(call):
+        return
+    if not call.from_user or not is_admin(call.from_user.id):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    await state.clear()
+    await call.answer("تم الإلغاء")
+    if call.message is not None and hasattr(call.message, "edit_text"):
+        await call.message.edit_text("⚙️ لوحة الإدارة\nاختر ما تريد القيام به:", reply_markup=admin_panel_keyboard())
 
 
 @router.message(RemoteImportStates.waiting_url)
