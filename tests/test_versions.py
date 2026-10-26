@@ -52,6 +52,7 @@ def test_latest_per_family_collapses_duplicates_but_keeps_os_versions_separate()
 
 def test_stable_version_beats_matching_beta_then_created_time_breaks_ties():
     assert release_sort_key(app(9, "CapCut", "2.0")) > release_sort_key(app(10, "CapCut", "2.0-beta"))
+    assert release_sort_key(app(11, "CapCut", "19.8.0")) > release_sort_key(app(12, "CapCut", "19.8.0-beta.2"))
     assert release_sort_key(app(4, "CapCut", "1.2", created=2)) > release_sort_key(app(3, "CapCut", "1.2", created=1))
 
 
