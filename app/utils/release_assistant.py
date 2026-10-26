@@ -19,7 +19,7 @@ from app.utils.versions import (
 def _score(name: str, platform: str | None, app: object) -> float:
     wanted_platform = normalize_platform(platform)
     app_platform = normalize_platform(getattr(app, "platform", None))
-    if wanted_platform != "unspecified" and app_platform != "unspecified" and wanted_platform != app_platform:
+    if wanted_platform != "unspecified" and wanted_platform != app_platform:
         return 0.0
     wanted = normalize_application_name(name)
     existing = normalize_application_name(getattr(app, "name", None))
