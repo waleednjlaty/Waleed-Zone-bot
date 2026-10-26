@@ -20,7 +20,12 @@ def _value(app: object, field: str) -> object:
 
 def normalize_application_name(value: object) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).casefold()
-    text = _FILE_SUFFIX.sub("", text).replace("_", " ")
+    text = _FILE_SUFFIX.sub("", text)
+    # Catalogue indexes (e.g. "01 CAPCUT PRO") and embedded version labels
+    # are metadata, not part of the application family name.
+    text = re.sub(r"^\s*#?\d{1,3}[\s.)_-]+(?=[^\W\d_])", "", text, count=1, flags=re.UNICODE)
+    text = re.sub(r"(?:^|[\s_-])v?\d+(?:\.\d+){1,5}(?:[-+][\w.-]+)?(?=$|[\s_-])", " ", text, flags=re.IGNORECASE)
+    text = text.replace("_", " ").casefold()
     return "".join(char for char in text if char.isalnum())
 
 
