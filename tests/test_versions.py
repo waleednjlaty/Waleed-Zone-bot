@@ -1,14 +1,13 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import pytest
-from database import repositories as repo
 from app.utils.versions import (
     application_family_key,
     latest_per_family,
     release_sort_key,
     sort_application_versions,
 )
+
 
 def app(app_id, name, version, platform="Android", created=1):
     return SimpleNamespace(
@@ -21,11 +20,19 @@ def test_family_identity_normalizes_name_and_separates_platform_tracks():
     assert application_family_key(app(1, "CapCut.apk", "1.2")) == application_family_key(app(2, "cap-cut", "1.3"))
     assert application_family_key(app(3, "CapCut", "1.3", "Android")) != application_family_key(app(4, "CapCut", "1.3", "Windows"))
 
+
 def test_catalog_index_and_embedded_version_do_not_split_one_app_family():
     old_release = app(10, "01 CAPCUT PRO 19.7.0", "19.7.0")
     new_release = app(11, "Cap cut pro v19.8.0", "19.8.0")
     assert application_family_key(old_release) == application_family_key(new_release)
     assert [item.version for item in latest_per_family([old_release, new_release])] == ["19.8.0"]
+
+
+def test_missing_version_field_is_inferred_from_application_title():
+    old_release = app(20, "CapCut Pro 19.7.0", None, created=10)
+    new_release = app(21, "CapCut Pro 19.8.0", None, created=1)
+    assert application_family_key(old_release) == application_family_key(new_release)
+    assert [item.id for item in latest_per_family([old_release, new_release])] == [21]
 
 
 def test_version_sorting_is_numeric_not_lexical():
@@ -49,4 +56,5 @@ def test_stable_version_beats_matching_beta_then_created_time_breaks_ties():
 
 
 def test_missing_names_do_not_merge_records():
+    from types import SimpleNamespace
     assert application_family_key(SimpleNamespace(id=1, name=None, platform=None)) != application_family_key(SimpleNamespace(id=2, name=None, platform=None))
