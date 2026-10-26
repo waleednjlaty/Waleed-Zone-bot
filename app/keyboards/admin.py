@@ -38,7 +38,7 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     for app in apps:
         kb.append(
             [_button(
-                text=f"{'🚫 ' if not app.active else ''}📱 {app.name}",
+                text=f"{'🚫 ' if not app.active else ''}📱 {app.name[:32]} · {app.version or '—'} · {app.platform or '—'}",
                 callback_data=AdminCB(action="app_manage", app_id=app.id, page=page).pack(),
             )]
         )
@@ -71,6 +71,7 @@ def app_manage_keyboard(
     website_url: str | None = None,
 ) -> InlineKeyboardMarkup:
     kb = [
+        [InlineKeyboardButton(text="➕ إضافة إصدار جديد", callback_data=AdminCB(action="new_release", app_id=app_id, page=page).pack())],
         [
             InlineKeyboardButton(text="✏️ تعديل", callback_data=AdminCB(action="edit_app", app_id=app_id, page=page).pack()),
             InlineKeyboardButton(text="📦 أرشفة", callback_data=AdminCB(action="delete_ask", app_id=app_id, page=page).pack()),
