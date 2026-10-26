@@ -38,7 +38,7 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     for app in apps:
         kb.append(
             [_button(
-                text=f"{'🚫 ' if not app.active else ''}📱 {app.name[:32]} · {app.version or '—'} · {app.platform or '—'}",
+                text=f"{'🚫 ' if not app.active else ''}📱 {app.name[:22]} · {str(app.version or '—')[:12]} · {str(app.platform or '—')[:10]}",
                 callback_data=AdminCB(action="app_manage", app_id=app.id, page=page).pack(),
             )]
         )
