@@ -8,7 +8,6 @@ from app.utils.constants import AdminCB, AppCB, BannedWordCB, MainMenuCB, ReqCB
 
 
 def _button(text: str, callback_data: str) -> InlineKeyboardButton:
-    """إنشاء زر موحّد لتقليل أخطاء بناء أزرار لوحة الإدارة."""
     return InlineKeyboardButton(text=text, callback_data=callback_data)
 
 
@@ -19,6 +18,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
         [_button("📤 رفع ملف", AppCB(action="upload", app_id=0).pack()),
          _button("🔗 إضافة برابط", AdminCB(action="add_link_app", page=0).pack())],
         [_button("🆕 إضافة تحديث", AdminCB(action="add_update", page=0).pack())],
+        [_button("⬇️ تنزيل رابط إلى قناة الملفات", AdminCB(action="remote_import", page=0).pack())],
         [_button("🎮 إضافة من SteamRIP", AdminCB(action="add_rip_game", page=0).pack())],
         [_button("🔗 إضافة لعبة برابط يدوي", AdminCB(action="add_manual_game").pack())],
         [_button("📱 إدارة التطبيقات", AdminCB(action="apps", page=0).pack()),
@@ -60,12 +60,7 @@ def apps_management_keyboard(apps: list, page: int, total_pages: int) -> InlineK
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
-def app_manage_keyboard(
-    app_id: int,
-    active: bool,
-    page: int,
-    website_url: str | None = None,
-) -> InlineKeyboardMarkup:
+def app_manage_keyboard(app_id: int, active: bool, page: int, website_url: str | None = None) -> InlineKeyboardMarkup:
     kb = [
         [InlineKeyboardButton(text="🆕 إضافة تحديث", callback_data=AdminCB(action="new_release", app_id=app_id, page=page).pack())],
         [
@@ -78,10 +73,7 @@ def app_manage_keyboard(
         ],
         [
             InlineKeyboardButton(text="📢 نشر بالقناة", callback_data=AdminCB(action="publish", app_id=app_id, page=page).pack()),
-            InlineKeyboardButton(
-                text="🚫 تعطيل" if active else "✅ تفعيل",
-                callback_data=AdminCB(action="toggle", app_id=app_id, page=page).pack(),
-            ),
+            InlineKeyboardButton(text="🚫 تعطيل" if active else "✅ تفعيل", callback_data=AdminCB(action="toggle", app_id=app_id, page=page).pack()),
         ],
     ]
     kb.append([InlineKeyboardButton(text="📎 ربط ملف Telegram", callback_data=AdminCB(action="attach_file", app_id=app_id, page=page).pack())])
@@ -141,14 +133,13 @@ def publish_select_keyboard(apps: list, page: int, total_pages: int) -> InlineKe
 
 
 def group_management_keyboard() -> InlineKeyboardMarkup:
-    kb = [
+    return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👋 إعدادات الترحيب", callback_data=AdminCB(action="welcome", page=0).pack())],
         [InlineKeyboardButton(text="🛡 إعدادات الحماية", callback_data=AdminCB(action="protection", page=0).pack())],
         [InlineKeyboardButton(text="🚫 الكلمات المحظورة", callback_data=AdminCB(action="banned_words", page=0).pack())],
         [InlineKeyboardButton(text="🔔 تنبيه: الأوامر داخل المجموعة", callback_data=AdminCB(action="group_help", page=0).pack())],
         [InlineKeyboardButton(text="🔙 لوحة الإدارة", callback_data=AdminCB(action="panel", page=0).pack())],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=kb)
+    ])
 
 
 def welcome_settings_keyboard(enabled: bool) -> InlineKeyboardMarkup:
@@ -187,13 +178,12 @@ def banned_words_keyboard(words: list[str]) -> InlineKeyboardMarkup:
 
 
 def settings_keyboard() -> InlineKeyboardMarkup:
-    kb = [
+    return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🛠 وضع الصيانة", callback_data=AdminCB(action="maintenance", page=0).pack())],
         [InlineKeyboardButton(text="📢 الاشتراك الإجباري", callback_data=AdminCB(action="force_sub", page=0).pack())],
         [InlineKeyboardButton(text="🔔 إشعارات التطبيقات", callback_data=AdminCB(action="notif_global", page=0).pack())],
         [InlineKeyboardButton(text="🔙 لوحة الإدارة", callback_data=AdminCB(action="panel", page=0).pack())],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=kb)
+    ])
 
 
 def broadcast_target_keyboard() -> InlineKeyboardMarkup:
