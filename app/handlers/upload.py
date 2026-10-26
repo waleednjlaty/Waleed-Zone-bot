@@ -24,6 +24,8 @@ from app.states import UploadStates
 from app.utils.constants import AdminCB, AppCB, MainMenuCB
 from app.utils.helpers import build_search_text, format_size, is_admin
 from app.utils.owner_guard import owner_gate
+from app.utils.release_assistant import suggest_release_candidates
+from app.utils.versions import normalize_platform
 from app.utils.text import append_app_footer, bounded_html, download_link_block, escape_html
 from app.utils.website import website_download_url
 from config import get_settings
@@ -311,10 +313,141 @@ async def on_size(message: Message, state: FSMContext):
 
 
 @router.message(UploadStates.waiting_platform)
-async def on_platform(message: Message,state: FSMContext):
+async def on_platform(message: Message, state: FSMContext, session: AsyncSession):
     if not await owner_gate(message):
         return
-    await _collect(message,state,"platform",UploadStates.waiting_category,"أرسل التصنيف (تطبيقات / ألعاب موبايل / ألعاب كمبيوتر…):",50)
+    value = (message.text or "").strip()
+    if not value or len(value) > 50 or any(ord(char) < 32 for char in value):
+        await message.answer("أرسل نظامًا صالحًا بين 1 و50 حرفًا.")
+        return
+    await state.update_data(platform=value)
+    data = await state.get_data()
+
+    # The dedicated "new release" flow already has an explicitly selected app.
+    # Only run suggestions for a newly uploaded/linked app, never replace that choice.
+    if data.get("release_from_app_id"):
+        await state.set_state(UploadStates.waiting_category)
+        await message.answer("أرسل التصنيف (تطبيقات / ألعاب موبايل / ألعاب كمبيوتر…):", reply_markup=cancel_keyboard())
+        return
+
+    applications = await repo.list_applications(session, active_only=True, public_only=False, limit=2000)
+    try:
+        provider, matches = await suggest_release_candidates(
+            applications,
+            name=str(data.get("name") or ""),
+            version=str(data.get("version") or ""),
+            platform=value,
+            limit=3,
+        )
+    except Exception:
+        # Matching is advisory; catalog entry creation must still work if the provider fails.
+        logger.warning("Application release suggestions unavailable")
+        provider, matches = "similarity", []
+
+    if matches:
+        await state.update_data(
+            match_candidate_ids=[int(item["id"]) for item in matches],
+            match_provider=provider,
+        )
+        await state.set_state(UploadStates.waiting_match_confirmation)
+        rows = []
+        for item in matches:
+            version_label = str(item.get("version") or "إصدار غير محدد")[:18]
+            platform_label = str(item.get("platform") or "نظام غير محدد")[:14]
+            confidence = int(max(0, min(1, float(item.get("confidence") or 0)))*100)
+            rows.append([InlineKeyboardButton(
+                text=f"✅ {str(item.get('name') or 'تطبيق')[:22]} · {version_label} · {confidence}%",
+                callback_data=f"upl:match_yes:{int(item['id'])}",
+            )])
+        rows.append([InlineKeyboardButton(text="❌ لا، تطبيق مختلف", callback_data="upl:match_no")])
+        source_label = "🤖 رتّب الذكاء الاصطناعي" if provider == "openai" else "🔎 اقتراح حسب تشابه الاسم والنظام"
+        candidate_lines = "\\n".join(
+            f"• {escape_html(str(item.get('name') or ''))} · {escape_html(str(item.get('version') or 'غير محدد'))} · {escape_html(str(item.get('platform') or 'نظام غير محدد'))}"
+            for item in matches
+        )
+        await message.answer(
+            f"{source_label}. لم يتم حفظ أو ربط أي تطبيق بعد.\n\n"
+            f"هل الملف الذي رفعته تحديث لأحد هذه التطبيقات؟\n{candidate_lines}\n\n"
+            "اختر التطبيق الصحيح لتأكيده؛ إذا ما كان واحدًا منهم اضغط «لا، تطبيق مختلف».",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        )
+        return
+
+    await state.set_state(UploadStates.waiting_category)
+    await message.answer("أرسل التصنيف (تطبيقات / ألعاب موبايل / ألعاب كمبيوتر…):", reply_markup=cancel_keyboard())
+
+
+@router.callback_query(F.data.startswith("upl:match_yes:"), UploadStates.waiting_match_confirmation)
+async def on_confirm_release_match(call: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await owner_gate(call):
+        return
+    if not _only_admin(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    data = await state.get_data()
+    try:
+        candidate_id = int((call.data or "").rsplit(":", 1)[1])
+    except (TypeError, ValueError, IndexError):
+        await call.answer("اقتراح غير صالح.", show_alert=True)
+        return
+    if candidate_id not in data.get("match_candidate_ids", []):
+        await call.answer("انتهت صلاحية الاقتراح. أعد المحاولة.", show_alert=True)
+        return
+    app = await repo.get_application(session, candidate_id)
+    if not app or not app.active:
+        await call.answer("التطبيق لم يعد متاحًا.", show_alert=True)
+        await call.message.answer("⚠️ أعد رفع التطبيق أو افتح إدارة التطبيقات لاختيار سجل آخر.")
+        await state.clear()
+        return
+    if normalize_platform(app.platform) != normalize_platform(data.get("platform")):
+        await call.answer("النظام مختلف؛ لم يتم اعتماد الاقتراح.", show_alert=True)
+        return
+    version = str(data.get("version") or "").strip()
+    if await repo.application_version_exists(session, name=app.name, platform=app.platform, version=version):
+        await call.answer("هذا الإصدار مسجّل بالفعل.", show_alert=True)
+        await call.message.answer(
+            f"⚠️ {escape_html(app.name)} {escape_html(version)} موجود مسبقًا. لم يتم إنشاء نسخة مكررة. "
+            "استخدم إدارة التطبيقات لتعديل السجل الموجود، أو اختر «لا، تطبيق مختلف» إذا كان الاقتراح خاطئًا."
+        )
+        return
+
+    # Explicit human confirmation is required before inheriting a release family.
+    # Keep the uploaded file/link and requested version; copy descriptive metadata only.
+    await state.update_data(
+        release_from_app_id=app.id,
+        release_base_revision=app.revision,
+        name=app.name,
+        description=app.description or "",
+        platform=app.platform or data.get("platform"),
+        category=app.category or "",
+        developer=app.developer or None,
+        icon_file_id=app.icon_file_id,
+        image_url=app.image_url,
+        match_confirmed_by_owner=True,
+    )
+    await state.set_state(UploadStates.waiting_publish_choice)
+    await call.answer("تم تأكيد هوية التطبيق.")
+    await call.message.answer(
+        f"✅ تم اعتماد اقتراحك: {escape_html(app.name)} · الإصدار الجديد {escape_html(version)}.\n"
+        "سيُنشأ سجل مستقل، ولن تتغير ملفات أو روابط الإصدارات السابقة. اختر حفظ المسودة أو النشر:"
+    )
+    await _prompt_publish_choice(call.message, state)
+
+
+@router.callback_query(F.data == "upl:match_no", UploadStates.waiting_match_confirmation)
+async def on_reject_release_match(call: CallbackQuery, state: FSMContext) -> None:
+    if not await owner_gate(call):
+        return
+    if not _only_admin(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    await state.update_data(match_candidate_ids=[], match_rejected=True)
+    await state.set_state(UploadStates.waiting_category)
+    await call.answer("تمام، سننشئه كتطبيق منفصل.")
+    await call.message.answer(
+        "تمام، لن أعتمد أي اقتراح. أرسل تصنيف التطبيق؛ سيبقى الاسم والإصدار والنظام كما أدخلتهم.",
+        reply_markup=cancel_keyboard(),
+    )
 
 
 @router.message(UploadStates.waiting_category)
