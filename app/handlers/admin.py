@@ -365,6 +365,11 @@ async def on_edit_value(
         if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.hostname == "api.telegram.org":
             await message.answer("❌ رابط الصورة غير صالح.")
             return
+    if field == "version" and await repo.application_version_exists(
+        session, name=app.name, platform=app.platform, version=value, exclude_id=app.id
+    ):
+        await message.answer("❌ هذا الإصدار مسجّل مسبقًا لهذا التطبيق والنظام. أدخل رقم إصدار مختلفًا.")
+        return
     setattr(app, field, value)
     if field in ("name", "category", "platform", "description"):
         from app.utils.helpers import build_search_text

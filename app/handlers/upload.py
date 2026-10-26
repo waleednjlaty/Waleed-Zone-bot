@@ -105,6 +105,39 @@ async def on_manual_link_start(call: CallbackQuery, state: FSMContext) -> None:
     )
 
 
+@router.callback_query(AdminCB.filter(F.action == "new_release"))
+async def on_new_release_start(call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession) -> None:
+    if not await owner_gate(call):
+        return
+    if not _only_admin(call):
+        await call.answer("⛔", show_alert=True)
+        return
+    app = await repo.get_application(session, callback_data.app_id)
+    if not app:
+        await call.answer("التطبيق غير موجود.", show_alert=True)
+        return
+    await state.clear()
+    await state.update_data(
+        release_from_app_id=app.id,
+        release_base_revision=app.revision,
+        name=app.name,
+        description=app.description or "",
+        platform=app.platform or "",
+        category=app.category or "",
+        developer=app.developer or "",
+        icon_file_id=app.icon_file_id,
+        image_url=app.image_url,
+    )
+    await state.set_state(UploadStates.waiting_file)
+    await call.answer()
+    await call.message.answer(
+        f"♻️ إضافة إصدار جديد لـ {escape_html(app.name)}.\n"
+        f"الإصدار الحالي المحدد: {escape_html(app.version or 'غير محدد')} · {escape_html(app.platform or 'نظام غير محدد')}\n"
+        "أرسل ملف الإصدار الجديد كمستند Telegram. سيتم إنشاء سجل منفصل وسيبقى الإصدار القديم وروابطه كما هي.",
+        reply_markup=cancel_keyboard(),
+    )
+
+
 @router.callback_query(AdminCB.filter(F.action == "attach_file"))
 async def on_attach_file(call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession) -> None:
     if not await owner_gate(call):
@@ -156,6 +189,13 @@ async def on_file(message: Message, state: FSMContext, session: AsyncSession) ->
         await message.answer("✅ تم ربط الملف بالموقع والبوت.")
         return
     await state.update_data(source=source,size=format_size(source.get("size_bytes") or 0))
+    if data.get("release_from_app_id"):
+        await state.set_state(UploadStates.waiting_version)
+        await message.answer(
+            f"✅ تم نسخ الملف. أرسل رقم الإصدار الجديد لـ {escape_html(data.get('name') or 'التطبيق')} (مثال: 19.8.0):",
+            reply_markup=cancel_keyboard(),
+        )
+        return
     await state.set_state(UploadStates.waiting_name)
     await message.answer("✅ تم نسخ الملف. أرسل اسم التطبيق:")
 
@@ -230,10 +270,28 @@ async def on_description(message: Message,state: FSMContext):
 
 
 @router.message(UploadStates.waiting_version)
-async def on_version(message: Message,state: FSMContext):
+async def on_version(message: Message,state: FSMContext,session: AsyncSession):
     if not await owner_gate(message):
         return
     data = await state.get_data()
+    if data.get("release_from_app_id"):
+        value = (message.text or "").strip()
+        if not value or len(value) > 50 or any(ord(c) < 32 for c in value):
+            await message.answer("أرسل رقم إصدار صالحًا بين 1 و50 حرفًا، مثل 19.8.0.")
+            return
+        if await repo.application_version_exists(
+            session, name=data["name"], platform=data.get("platform"), version=value
+        ):
+            await message.answer("❌ هذا الإصدار موجود مسبقًا لهذا التطبيق والنظام. أدخل رقم إصدار مختلفًا.")
+            return
+        await state.update_data(version=value)
+        if data.get("manual_external"):
+            await state.set_state(UploadStates.waiting_size)
+            await message.answer("أرسل حجم الملف مثل 1.8 GB أو /skip:", reply_markup=cancel_keyboard())
+        else:
+            await state.set_state(UploadStates.waiting_publish_choice)
+            await _prompt_publish_choice(message, state)
+        return
     if data.get("manual_external"):
         await _collect(message,state,"version",UploadStates.waiting_size,"أرسل حجم الملف مثل 1.8 GB أو /skip:",50)
     else:
@@ -282,20 +340,8 @@ async def on_developer(message: Message, state: FSMContext):
     await _collect(message,state,"developer",UploadStates.waiting_icon,"أرسل صورة التطبيق أو /skip لتجاوزها:",255)
 
 
-@router.message(UploadStates.waiting_icon)
-async def on_icon(message: Message,state: FSMContext):
-    if not await owner_gate(message):
-        return
-    photo=message.photo[-1].file_id if message.photo else None
-    image_url=None
-    if photo:
-        image_url=await ImgBBUploader(api_key=get_settings().IMGBB_API_KEY or "").upload_telegram_photo(message.bot,photo)
-    elif message.text != "/skip":
-        await message.answer("أرسل صورة أو /skip.")
-        return
-    await state.update_data(icon_file_id=photo,image_url=image_url)
-    await state.set_state(UploadStates.waiting_publish_choice)
-    data=await state.get_data()
+async def _prompt_publish_choice(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
     if data.get("manual_external"):
         source_label = "🔗 رابط خارجي يدوي"
         rows = [
@@ -318,6 +364,22 @@ async def on_icon(message: Message,state: FSMContext):
     )
 
 
+@router.message(UploadStates.waiting_icon)
+async def on_icon(message: Message,state: FSMContext):
+    if not await owner_gate(message):
+        return
+    photo=message.photo[-1].file_id if message.photo else None
+    image_url=None
+    if photo:
+        image_url=await ImgBBUploader(api_key=get_settings().IMGBB_API_KEY or "").upload_telegram_photo(message.bot,photo)
+    elif message.text != "/skip":
+        await message.answer("أرسل صورة أو /skip.")
+        return
+    await state.update_data(icon_file_id=photo,image_url=image_url)
+    await state.set_state(UploadStates.waiting_publish_choice)
+    await _prompt_publish_choice(message, state)
+
+
 @router.callback_query(F.data.in_({"upl:save_draft","upl:save_site","upl:save_publish"}), UploadStates.waiting_publish_choice)
 async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSession):
     if not await owner_gate(call):
@@ -327,6 +389,19 @@ async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSes
         return
     data=await state.get_data()
     manual_external = data.get("manual_external") is True
+    if data.get("release_from_app_id"):
+        base_app = await repo.get_application(session, data["release_from_app_id"])
+        if not base_app or base_app.revision != data.get("release_base_revision"):
+            await state.clear()
+            await call.answer("تغيّر التطبيق الأساسي أثناء إضافة الإصدار.", show_alert=True)
+            await call.message.answer("⚠️ لم يُحفظ الإصدار لأن بيانات التطبيق الأصلي تغيّرت. أعد فتحه وأنشئ الإصدار من جديد.")
+            return
+        if await repo.application_version_exists(
+            session, name=data["name"], platform=data.get("platform"), version=data.get("version") or ""
+        ):
+            await call.answer("رقم الإصدار موجود مسبقًا لهذا التطبيق والنظام.", show_alert=True)
+            await call.message.answer("❌ لم يُحفظ التحديث لأن رقم الإصدار موجود. ألغِ العملية وابدأ من جديد برقم إصدار مختلف.")
+            return
     if (
         not data.get("name")
         or (manual_external and not data.get("devupload_url"))

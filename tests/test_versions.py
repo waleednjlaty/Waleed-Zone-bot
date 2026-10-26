@@ -1,13 +1,14 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+from database import repositories as repo
 from app.utils.versions import (
     application_family_key,
     latest_per_family,
     release_sort_key,
     sort_application_versions,
 )
-
 
 def app(app_id, name, version, platform="Android", created=1):
     return SimpleNamespace(
