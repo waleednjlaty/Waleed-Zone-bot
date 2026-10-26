@@ -25,7 +25,7 @@ async def test_application_version_exists_is_scoped_to_app_family_and_platform(d
             session, name=original.name, platform="Android", version="19.9.0"
         )
         assert not await repo.application_version_exists(
-            session, name=original.name, platform="Windows", version="19.8.0"
+            session, name=original.name, platform="Windows", version="19.9.0"
         )
 
 
