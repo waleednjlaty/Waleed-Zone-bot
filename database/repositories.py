@@ -422,7 +422,7 @@ async def list_favorites(
         .order_by(Favorite.created_at.desc(), Application.id.desc())
     )
     rows = list((await session.scalars(stmt)).all())
-    return latest_per_family(rows)[offset : offset + limit])
+    return latest_per_family(rows)[offset : offset + limit]
 
 
 async def count_favorites(session: AsyncSession, user_id: int) -> int:
