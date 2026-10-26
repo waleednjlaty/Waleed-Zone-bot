@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
-import os
 import re
 import socket
 import tempfile
@@ -21,7 +20,6 @@ import aiofiles
 import httpx
 from aiogram import F, Router
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.upload_service import files_channel
 from app.states import RemoteImportStates
@@ -47,10 +45,11 @@ def _allowed_hosts() -> set[str]:
 def _parse_url(raw: str) -> tuple[str, str]:
     parsed = urlsplit(raw.strip())
     host = (parsed.hostname or "").lower().rstrip(".")
-    if (
-        parsed.scheme != "https" or not host or parsed.username or parsed.password
-        or parsed.port not in (None, 443) or parsed.fragment or parsed.query
-    ):
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("INVALID_URL") from exc
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password or port not in (None, 443) or parsed.fragment:
         raise ValueError("INVALID_URL")
     if host not in _allowed_hosts():
         raise ValueError("HOST_NOT_ALLOWED")
@@ -129,7 +128,7 @@ async def on_remote_import_start(call: CallbackQuery, state) -> None:
 
 
 @router.message(RemoteImportStates.waiting_url)
-async def on_remote_import_url(message: Message, state, session: AsyncSession) -> None:
+async def on_remote_import_url(message: Message, state) -> None:
     if not await owner_gate(message):
         return
     if not message.from_user or not is_admin(message.from_user.id):
@@ -141,7 +140,7 @@ async def on_remote_import_url(message: Message, state, session: AsyncSession) -
     except ValueError as exc:
         reason = str(exc)
         messages = {
-            "INVALID_URL": "الرابط غير صالح. استخدم HTTPS على المنفذ 443 دون query أو بيانات دخول.",
+            "INVALID_URL": "الرابط غير صالح. استخدم HTTPS على المنفذ 443 دون بيانات دخول أو #fragment.",
             "HOST_NOT_ALLOWED": "المضيف غير موجود في قائمة السماح. أضفه إلى REMOTE_UPLOAD_ALLOWED_HOSTS في إعدادات Railway بعد التأكد من موثوقيته.",
             "UNSUPPORTED_FILE_TYPE": "امتداد الملف غير مدعوم. استخدم APK / XAPK / APKS / ZIP / EXE / MSI / DMG / IPA / 7Z / RAR / TAR / GZ.",
         }
@@ -156,7 +155,6 @@ async def on_remote_import_url(message: Message, state, session: AsyncSession) -
         return
 
     status = await message.answer("⏳ جاري التحقق من الرابط وتنزيل الملف مؤقتًا...")
-    temp_path: Path | None = None
     try:
         with tempfile.TemporaryDirectory(prefix="wz-remote-") as directory:
             temp_path = Path(directory) / filename
