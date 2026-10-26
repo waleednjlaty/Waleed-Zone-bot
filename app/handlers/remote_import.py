@@ -13,6 +13,7 @@ import logging
 import re
 import socket
 import tempfile
+from math import ceil
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
@@ -34,6 +35,7 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 router = Router(name="remote_import")
+APP_PAGE_SIZE = 8
 MAX_REMOTE_BYTES = 45 * 1024 * 1024
 CHUNK_SIZE = 64 * 1024
 ALLOWED_EXTENSIONS = {".apk", ".xapk", ".apks", ".aab", ".zip", ".exe", ".msi", ".dmg", ".ipa", ".7z", ".rar", ".tar", ".gz"}
@@ -157,7 +159,7 @@ async def on_remote_import_done(call: CallbackQuery, state) -> None:
 
 
 @router.callback_query(AdminCB.filter(F.action == "remote_import_attach"))
-async def on_remote_import_attach(call: CallbackQuery, state, session) -> None:
+async def on_remote_import_attach(call: CallbackQuery, callback_data: AdminCB, state, session) -> None:
     if not await owner_gate(call):
         return
     if not call.from_user or not is_admin(call.from_user.id):
@@ -169,12 +171,23 @@ async def on_remote_import_attach(call: CallbackQuery, state, session) -> None:
         return
     apps = await repo.list_applications(session, active_only=True, public_only=False, limit=1000)
     apps = sort_application_versions(latest_per_family(apps))
+    total_pages = max(1, ceil(len(apps) / APP_PAGE_SIZE))
+    page = max(0, min(callback_data.page, total_pages - 1))
+    visible = apps[page * APP_PAGE_SIZE:(page + 1) * APP_PAGE_SIZE]
     rows = []
-    for app in apps[:80]:
+    for app in visible:
         rows.append([InlineKeyboardButton(
             text=f"{str(app.name or 'تطبيق')[:24]} · {str(app.version or '؟')[:12]} · {str(app.platform or '؟')[:10]}",
-            callback_data=AdminCB(action="remote_import_select", app_id=app.id, page=0).pack(),
+            callback_data=AdminCB(action="remote_import_select", app_id=app.id, page=page).pack(),
         )])
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="⬅️ السابق", callback_data=AdminCB(action="remote_import_attach", page=page - 1).pack()))
+        nav.append(InlineKeyboardButton(text=f"📄 {page + 1}/{total_pages}", callback_data="noop"))
+        if page < total_pages - 1:
+            nav.append(InlineKeyboardButton(text="التالي ➡️", callback_data=AdminCB(action="remote_import_attach", page=page + 1).pack()))
+        rows.append(nav)
     rows.append([InlineKeyboardButton(text="❌ إلغاء", callback_data=AdminCB(action="remote_import_done", page=0).pack())])
     await call.answer()
     await call.message.edit_text(
