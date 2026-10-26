@@ -188,7 +188,7 @@ def _request_openai(records: list[dict[str, Any]], api_key: str, model: str) -> 
             "name": item["name"][:160],
             "version": str(item.get("version") or "")[:60],
             "platform": str(item.get("platform") or "")[:50],
-            "category": str(getattr(next(app for app in records if app["id"] == item["id"]), "category", "") or "")[:60],
+            "category": str(item.get("category") or "")[:60],
         }
         for item in records[:220]
     ]
@@ -227,7 +227,15 @@ async def suggest_application_groups(apps: list[object], api_key: str | None, mo
     fallback = heuristic_release_groups(apps)
     if not api_key:
         return {"provider": "heuristic", "scanned": len(apps), "groups": fallback}
-    records = [_item(app) for app in apps if getattr(app, "id", None)]
+    records = [
+        {
+            **_item(app),
+            "category": str(getattr(app, "category", None) or ""),
+            "developer": str(getattr(app, "developer", None) or ""),
+            "description": str(getattr(app, "description", None) or ""),
+        }
+        for app in apps if getattr(app, "id", None)
+    ]
     try:
         raw_groups = await asyncio.to_thread(_request_openai, records, api_key, model)
         groups = _validate_ai_groups({"groups": raw_groups}, apps)
