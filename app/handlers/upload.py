@@ -401,6 +401,7 @@ async def on_icon(message: Message,state: FSMContext,session: AsyncSession):
         suggestions = {"provider": "similarity", "items": []}
     items = suggestions.get("items", [])
     if items:
+        await state.set_state(UploadStates.waiting_publish_choice)
         await state.update_data(release_match_candidates=[int(item["id"]) for item in items])
         rows = []
         for item in items[:5]:
