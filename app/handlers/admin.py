@@ -170,6 +170,41 @@ async def on_app_manage(
     )
 
 
+@router.callback_query(AdminCB.filter(F.action == "app_versions"))
+async def on_app_versions(
+    call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
+) -> None:
+    if not await owner_gate(call):
+        return
+    if not _guard(call):
+        await call.answer("⛔", show_alert=True)
+        return
+    app = await repo.get_application(session, callback_data.app_id)
+    if app is None:
+        await call.answer("التطبيق غير موجود.", show_alert=True)
+        return
+    releases = await repo.list_application_versions(session, app.id)
+    if not releases:
+        await call.answer("لا توجد إصدارات منشورة لهذا التطبيق.", show_alert=True)
+        return
+    rows = []
+    for release in releases[:50]:
+        status = "✅ منشور" if release.published and release.active else "📝 مسودة/معطّل"
+        rows.append([InlineKeyboardButton(
+            text=f"{release.version or 'إصدار غير محدد'} · {release.platform or 'نظام غير محدد'} · #{release.id} · {status}",
+            callback_data=AdminCB(action="app_manage", app_id=release.id, page=callback_data.page).pack(),
+        )])
+    rows.append([InlineKeyboardButton(
+        text="⬅️ رجوع",
+        callback_data=AdminCB(action="app_manage", app_id=app.id, page=callback_data.page).pack(),
+    )])
+    await call.answer()
+    await call.message.edit_text(
+        f"🧾 سجل إصدارات {escape_html(app.name)}\\nاختر الإصدار الذي تريد إدارته:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
 @router.callback_query(AdminCB.filter(F.action == "app_link"))
 async def on_app_link(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
