@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.utils.constants import (
@@ -17,6 +19,20 @@ from app.utils.constants import (
 from config import get_settings
 
 PER_PAGE = 8
+
+
+def _steamrip_page_url(value: str | None) -> str | None:
+    """Return only a canonical HTTPS SteamRIP game-page URL."""
+    if not value or len(value) > 2000:
+        return None
+    try:
+        parsed = urlsplit(value.strip())
+    except ValueError:
+        return None
+    if (parsed.scheme == "https" and parsed.hostname in {"steamrip.com", "www.steamrip.com"}
+            and parsed.username is None and parsed.password is None):
+        return value.strip()
+    return None
 
 
 def _telegram_link(value: str | None) -> str | None:
@@ -87,8 +103,8 @@ def apps_list_keyboard(
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=(f"📱 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"📱 {str(app.name or 'تطبيق')[:45]}"),
-                callback_data=AppCB(action="open", app_id=app.id).pack(),
+                text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "devupload_url", None)) else (f"📱 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"📱 {str(app.name or 'تطبيق')[:45]}"),
+                **({"url": _steamrip_page_url(getattr(app, "devupload_url", None))} if _steamrip_page_url(getattr(app, "devupload_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
             )]
         )
     if total_pages > 1:
@@ -113,8 +129,8 @@ def latest_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboardMa
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=(f"🆕 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"🆕 {str(app.name or 'تطبيق')[:45]}"),
-                callback_data=AppCB(action="open", app_id=app.id).pack(),
+                text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "devupload_url", None)) else (f"🆕 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"🆕 {str(app.name or 'تطبيق')[:45]}"),
+                **({"url": _steamrip_page_url(getattr(app, "devupload_url", None))} if _steamrip_page_url(getattr(app, "devupload_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
             )]
         )
     if total_pages > 1:
@@ -134,8 +150,8 @@ def favorites_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboar
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=f"❤️ {app.name}",
-                callback_data=AppCB(action="open", app_id=app.id).pack(),
+                text=f"🎮 {app.name}" if _steamrip_page_url(getattr(app, "devupload_url", None)) else f"❤️ {app.name}",
+                **({"url": _steamrip_page_url(getattr(app, "devupload_url", None))} if _steamrip_page_url(getattr(app, "devupload_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
             )]
         )
     if total_pages > 1:
@@ -156,13 +172,15 @@ def app_detail_keyboard(
     is_fav: bool = False,
     is_admin_user: bool = False,
     releases: list | None = None,
+    steamrip_url: str | None = None,
 ) -> InlineKeyboardMarkup:
-    kb: list[list[InlineKeyboardButton]] = [
-        [InlineKeyboardButton(
-            text="⬇️ تحميل التطبيق",
-            callback_data=AppCB(action="download", app_id=app_id).pack(),
-        )],
-    ]
+    original_page = _steamrip_page_url(steamrip_url)
+    primary_button = (
+        InlineKeyboardButton(text="🌐 فتح صفحة اللعبة على SteamRIP", url=original_page)
+        if original_page else
+        InlineKeyboardButton(text="⬇️ تحميل التطبيق", callback_data=AppCB(action="download", app_id=app_id).pack())
+    )
+    kb: list[list[InlineKeyboardButton]] = [[primary_button]]
     if releases and len(releases) > 1:
         visible_releases = list(releases[:8])
         if not any(release.id == app_id for release in visible_releases):
