@@ -119,6 +119,7 @@ async def on_new_release_start(call: CallbackQuery, callback_data: AdminCB, stat
     await state.clear()
     await state.update_data(
         release_from_app_id=app.id,
+        release_base_revision=app.revision,
         name=app.name,
         description=app.description or "",
         platform=app.platform or "",
@@ -388,6 +389,19 @@ async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSes
         return
     data=await state.get_data()
     manual_external = data.get("manual_external") is True
+    if data.get("release_from_app_id"):
+        base_app = await repo.get_application(session, data["release_from_app_id"])
+        if not base_app or base_app.revision != data.get("release_base_revision"):
+            await state.clear()
+            await call.answer("تغيّر التطبيق الأساسي أثناء إضافة الإصدار.", show_alert=True)
+            await call.message.answer("⚠️ لم يُحفظ الإصدار لأن بيانات التطبيق الأصلي تغيّرت. أعد فتحه وأنشئ الإصدار من جديد.")
+            return
+        if await repo.application_version_exists(
+            session, name=data["name"], platform=data.get("platform"), version=data.get("version") or ""
+        ):
+            await call.answer("رقم الإصدار موجود مسبقًا لهذا التطبيق والنظام.", show_alert=True)
+            await call.message.answer("❌ لم يُحفظ التحديث لأن رقم الإصدار موجود. ألغِ العملية وابدأ من جديد برقم إصدار مختلف.")
+            return
     if (
         not data.get("name")
         or (manual_external and not data.get("devupload_url"))
