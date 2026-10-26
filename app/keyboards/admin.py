@@ -111,6 +111,17 @@ def requests_keyboard(requests: list, page: int, total_pages: int) -> InlineKeyb
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
+def request_manage_keyboard(req_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ تم التنفيذ", callback_data=ReqCB(action="complete", req_id=req_id).pack())],
+        [
+            InlineKeyboardButton(text="⏳ قيد المعالجة", callback_data=ReqCB(action="process", req_id=req_id).pack()),
+            InlineKeyboardButton(text="❌ رفض الطلب", callback_data=ReqCB(action="reject", req_id=req_id).pack()),
+        ],
+        [InlineKeyboardButton(text="🔙 الطلبات", callback_data=AdminCB(action="requests", page=0).pack())],
+    ])
+
+
 def publish_select_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
     kb: list[list[InlineKeyboardButton]] = []
     if not apps:
