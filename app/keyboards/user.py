@@ -87,7 +87,7 @@ def apps_list_keyboard(
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=f"📱 {app.name}",
+                text=(f"📱 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"📱 {str(app.name or 'تطبيق')[:45]}"),
                 callback_data=AppCB(action="open", app_id=app.id).pack(),
             )]
         )
@@ -113,7 +113,7 @@ def latest_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboardMa
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=f"🆕 {app.name}",
+                text=(f"🆕 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"🆕 {str(app.name or 'تطبيق')[:45]}"),
                 callback_data=AppCB(action="open", app_id=app.id).pack(),
             )]
         )
@@ -155,6 +155,7 @@ def app_detail_keyboard(
     *,
     is_fav: bool = False,
     is_admin_user: bool = False,
+    releases: list | None = None,
 ) -> InlineKeyboardMarkup:
     kb: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(
@@ -162,6 +163,23 @@ def app_detail_keyboard(
             callback_data=AppCB(action="download", app_id=app_id).pack(),
         )],
     ]
+    if releases and len(releases) > 1:
+        release_row: list[InlineKeyboardButton] = []
+        for release in releases[:8]:
+            version = str(release.version or "إصدار غير محدد").strip()[:24]
+            platform = str(release.platform or "").strip()[:12]
+            label = ("✅ " if release.id == app_id else "📦 ") + version
+            if platform:
+                label += " · " + platform
+            release_row.append(InlineKeyboardButton(
+                text=label[:60],
+                callback_data=AppCB(action="open", app_id=release.id).pack(),
+            ))
+            if len(release_row) == 2:
+                kb.append(release_row)
+                release_row = []
+        if release_row:
+            kb.append(release_row)
    # kb.append(
     
     #    [
