@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utils.versions import application_family_key, latest_per_family, sort_application_versions
+
 from database.models import (
     AppRequest,
     Application,
@@ -173,11 +175,10 @@ async def list_latest(
     stmt = (
         select(Application)
         .where(Application.active.is_(True), Application.published.is_(True))
-        .order_by(Application.created_at.desc())
-        .offset(offset)
-        .limit(limit)
+        .order_by(Application.created_at.desc(), Application.id.desc())
     )
-    return list((await session.scalars(stmt)).all())
+    rows = list((await session.scalars(stmt)).all())
+    return latest_per_family(rows)[offset : offset + limit])
 
 
 async def list_by_category(
@@ -190,11 +191,10 @@ async def list_by_category(
             Application.published.is_(True),
             func.lower(Application.category) == category.lower(),
         )
-        .order_by(Application.created_at.desc())
-        .offset(offset)
-        .limit(limit)
+        .order_by(Application.created_at.desc(), Application.id.desc())
     )
-    return list((await session.scalars(stmt)).all())
+    rows = list((await session.scalars(stmt)).all())
+    return latest_per_family(rows)[offset : offset + limit])
 
 
 async def list_categories(session: AsyncSession) -> list[str]:
@@ -223,11 +223,22 @@ async def search_applications(
             Application.published.is_(True),
             (Application.search_text.ilike(q) | Application.name.ilike(q) | Application.description.ilike(q)),
         )
-        .order_by(Application.downloads.desc())
-        .limit(limit)
+        .order_by(Application.downloads.desc(), Application.created_at.desc(), Application.id.desc())
+        .limit(max(limit * 20, 100))
     )
-    return list((await session.scalars(stmt)).all())
+    rows = list((await session.scalars(stmt)).all())
+    return latest_per_family(rows)[:limit])
 
+
+async def list_application_versions(session: AsyncSession, app_id: int) -> list[Application]:
+    """Return published releases for the selected app/platform family, newest version first."""
+    source = await get_active_application(session, app_id)
+    if source is None:
+        return []
+    stmt = select(Application).where(Application.active.is_(True), Application.published.is_(True))
+    rows = list((await session.scalars(stmt)).all())
+    key = application_family_key(source)
+    return sort_application_versions([app for app in rows if application_family_key(app) == key])
 
 async def update_application(session: AsyncSession, app: Application) -> None:
     await session.flush()
