@@ -159,8 +159,15 @@ async def on_app_manage(
     if app is None:
         await call.answer("التطبيق غير موجود.", show_alert=True)
         return
+    versions = await repo.list_application_versions(session, app.id)
+    release_summary = "\\n\\n📚 إصدارات هذا التطبيق:\\n" + "\\n".join(
+        f"{'🟢' if release.id == app.id else '▫️'} {escape_html(release.version or 'إصدار غير محدد')} · {escape_html(release.platform or 'نظام غير محدد')} · #{release.id}"
+        for release in versions[:10]
+    )
+    if len(versions) > 10:
+        release_summary += f"\\n… و{len(versions) - 10} إصدارات أخرى"
     await call.message.edit_text(
-        app_card(app),
+        app_card(app) + release_summary,
         reply_markup=app_manage_keyboard(
             app.id,
             app.active,
