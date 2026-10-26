@@ -56,7 +56,7 @@ async def suggest_application_families(name: str, version: str, platform: str, c
                 {"role": "system", "content": (
                     "You match software catalog records. Only select a candidate if it is clearly the same app, "
                     "not a competitor or related product. Platform must match. Never invent IDs. If uncertain, "
-                    "return no matches. Return JSON {\\"matches\\":[{\\"id\\": integer, \\"confidence\\": number, \\"reason\\": short string}]}."
+                    "If uncertain, return an empty matches array. Return a JSON object with a matches array; each item has id, confidence, and reason."
                 )},
                 {"role": "user", "content": __import__("json").dumps({
                     "wanted": {"name": name, "version": version, "platform": platform},
