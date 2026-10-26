@@ -42,12 +42,16 @@ async def show_app(
 
     user_id = target.from_user.id
     is_fav = await repo.is_favorite(session, user_id, app_id)
+    releases = await repo.list_application_versions(session, app_id)
     kb = app_detail_keyboard(
         app_id,
         is_fav=is_fav,
         is_admin_user=is_admin(user_id),
+        releases=releases,
     )
     text = app_card(app)
+    if len(releases) > 1:
+        text += "\n\n🧾 الإصدارات المتاحة: " + str(len(releases)) + "\nاختر الإصدار المطلوب من الأزرار أدناه."
 
     # نفضّل رابط ImgBB المرتبط بالتطبيق لأنه ثابت ومتاح خارج جلسة Telegram،
     # ثم نرجع إلى file_id كاحتياط للتطبيقات القديمة.

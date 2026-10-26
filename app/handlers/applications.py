@@ -25,6 +25,7 @@ from app.utils.catalog import (
 )
 from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB, MainMenuCB
 from app.utils.helpers import paginate
+from app.utils.versions import latest_per_family
 from app.utils.text import download_link_block, escape_html
 from database import repositories as repo
 
@@ -62,7 +63,7 @@ async def on_apps_list(
     elif category in {PC_GAME_CATEGORY, MOBILE_GAME_CATEGORY}:
         # دعم السجلات الجديدة والقديمة معاً بدون Migration لقاعدة البيانات.
         all_apps = await repo.list_applications(session, active_only=True, limit=1000)
-        apps = [app for app in all_apps if app_matches_category(app, category)]
+        apps = latest_per_family([app for app in all_apps if app_matches_category(app, category)])
     else:
         apps = await repo.list_by_category(session, category, limit=100)
 
@@ -154,9 +155,11 @@ async def on_toggle_favorite(
 
     await call.answer(msg)
     is_fav = callback_data.action == "fav"
+    releases = await repo.list_application_versions(session, app.id)
     kb = app_detail_keyboard(
         app.id,
         is_fav=is_fav,
+        releases=releases,
     )
     try:
         await call.message.edit_reply_markup(reply_markup=kb)
