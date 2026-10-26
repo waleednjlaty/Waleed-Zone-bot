@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.handlers.common import show_app
 from app.keyboards.user import (
-    _steamrip_page_url,
     app_detail_keyboard,
     apps_list_keyboard,
     back_to_menu_keyboard,
