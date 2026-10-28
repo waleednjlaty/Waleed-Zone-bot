@@ -22,7 +22,7 @@ def app_fixture():
 
 
 @pytest.mark.parametrize('url', ['https://waleed-zone.up.railway.app/download/123',
-    'https://fafda.to/d/file?v=fixture-token', 'https://shrinkme.io/file'])
+    'https://fafda.to/d/file?v=fixture-token', 'https://downloads.example.test/file'])
 def test_final_download_footer_safe_once(url):
     text = final_download_message(app_fixture(), url)
     assert text.count(APP_DOWNLOAD_FOOTER) == 1
@@ -76,14 +76,14 @@ async def test_http_only_resolver_deduplicates_and_caps(monkeypatch):
 
 async def test_no_transaction_during_fetch_and_source_edit_rejected(db, monkeypatch):
     async with db.session() as session:
-        app = await repo.create_application(session, name='Source race', devupload_url='https://steamrip.com/qa/')
+        app = await repo.create_application(session, name='Source race', source_url='https://steamrip.com/qa/')
         app.published = True
         await session.commit()
         async def fetch(url):
             assert not session.in_transaction()
             async with db.session() as editor:
                 row = await repo.get_application(editor, app.id)
-                row.devupload_url = 'https://steamrip.com/changed/'
+                row.source_url = 'https://steamrip.com/changed/'
                 await editor.commit()
             return {'servers': {'BZZHR': 'https://bzzhr.to/a'}}
         monkeypatch.setattr(service, 'fetch_game_data', fetch)
@@ -121,7 +121,7 @@ async def test_channel_promo_releases_db_before_telegram_and_rechecks_revision(d
     from app.handlers import upload
     monkeypatch.setattr(upload, 'get_settings', lambda: SimpleNamespace(CHANNEL_ID=-1001))
     async with db.session() as session:
-        app = await repo.create_application(session, name='Channel QA', devupload_url='https://shrinkme.io/qa')
+        app = await repo.create_application(session, name='Channel QA', source_url='https://downloads.example.test/qa.apk')
         await session.commit()
         async def send(*args, **kwargs):
             assert not session.in_transaction()
@@ -192,7 +192,7 @@ async def test_bot_reports_source_failure_with_stable_website_link(monkeypatch):
 @pytest.mark.parametrize("code", ["PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED", "PROVIDER_RATE_LIMITED", "PROVIDER_FORBIDDEN"])
 async def test_steamrip_service_stops_all_sources_at_provider_access_barrier(db, monkeypatch, code):
     async with db.session() as session:
-        app = await repo.create_application(session, name="Barrier QA", devupload_url="https://steamrip.com/qa/")
+        app = await repo.create_application(session, name="Barrier QA", source_url="https://steamrip.com/qa/")
         app.published = True
         await session.commit()
         monkeypatch.setattr(service, "fetch_game_data", AsyncMock(return_value={"servers": {
