@@ -53,9 +53,9 @@ class Settings(BaseSettings):
     WEBSITE_STATS_URL: str = "https://waleed-zone.up.railway.app/api/stats"
     WEBSITE_STATS_TOKEN: str | None = Field(default=None, repr=False)
 
-    # Direct-URL import is allowlisted separately; blank falls back to the legacy host list.
+    # Direct URL imports and external download links require explicit allowlists.
     REMOTE_UPLOAD_ALLOWED_HOSTS: str = ""
-    LEGACY_DOWNLOAD_ALLOWED_HOSTS: str = "devuploads.com,shrinkme.io,shrinkme.site"
+    EXTERNAL_DOWNLOAD_ALLOWED_HOSTS: str = ""
 
     @property
     def admin_ids(self) -> list[int]:

@@ -103,8 +103,8 @@ def apps_list_keyboard(
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "devupload_url", None)) else (f"📱 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"📱 {str(app.name or 'تطبيق')[:45]}"),
-                **({"url": _steamrip_page_url(getattr(app, "devupload_url", None))} if _steamrip_page_url(getattr(app, "devupload_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
+                text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "source_url", None)) else (f"📱 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"📱 {str(app.name or 'تطبيق')[:45]}"),
+                **({"url": _steamrip_page_url(getattr(app, "source_url", None))} if _steamrip_page_url(getattr(app, "source_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
             )]
         )
     if total_pages > 1:
@@ -129,8 +129,8 @@ def latest_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboardMa
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "devupload_url", None)) else (f"🆕 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"🆕 {str(app.name or 'تطبيق')[:45]}"),
-                **({"url": _steamrip_page_url(getattr(app, "devupload_url", None))} if _steamrip_page_url(getattr(app, "devupload_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
+                text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "source_url", None)) else (f"🆕 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"🆕 {str(app.name or 'تطبيق')[:45]}"),
+                **({"url": _steamrip_page_url(getattr(app, "source_url", None))} if _steamrip_page_url(getattr(app, "source_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
             )]
         )
     if total_pages > 1:
@@ -150,8 +150,8 @@ def favorites_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboar
     for app in apps:
         kb.append(
             [InlineKeyboardButton(
-                text=f"🎮 {app.name}" if _steamrip_page_url(getattr(app, "devupload_url", None)) else f"❤️ {app.name}",
-                **({"url": _steamrip_page_url(getattr(app, "devupload_url", None))} if _steamrip_page_url(getattr(app, "devupload_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
+                text=f"🎮 {app.name}" if _steamrip_page_url(getattr(app, "source_url", None)) else f"❤️ {app.name}",
+                **({"url": _steamrip_page_url(getattr(app, "source_url", None))} if _steamrip_page_url(getattr(app, "source_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
             )]
         )
     if total_pages > 1:

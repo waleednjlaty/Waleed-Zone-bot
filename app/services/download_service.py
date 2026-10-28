@@ -18,6 +18,7 @@ from config import get_settings
 from database.models import Application
 from database import repositories as repo
 from app.utils.website import website_download_url
+from app.utils.download_policy import is_blocked_download_provider_host
 from integrations.public_http import public_url
 from integrations.steamrip_extractor import fetch_game_data, extract_bzzhr_direct_link, _is_bzzhr_url, ProviderResolutionError
 
@@ -29,7 +30,13 @@ _ACTIVE: set[tuple[int, int]] = set()
 def manual_url(value: str, hosts: set[str] | None = None) -> str:
     if len(value) > 2000 or any(c.isspace() for c in value):
         raise ValueError("INVALID_SOURCE")
-    hosts = hosts if hosts is not None else {h.strip().lower() for h in get_settings().LEGACY_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()}
+    hosts = hosts if hosts is not None else {h.strip().lower() for h in get_settings().EXTERNAL_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()}
+    try:
+        host = urlsplit(value).hostname
+    except ValueError as exc:
+        raise ValueError("INVALID_SOURCE") from exc
+    if is_blocked_download_provider_host(host):
+        raise ValueError("UNSUPPORTED_PROVIDER")
     if _is_bzzhr_url(value):
         parsed = urlsplit(value)
         if not re.fullmatch(r"/[A-Za-z0-9_-]+/?", parsed.path) or parsed.query:
@@ -46,14 +53,14 @@ async def resolve_application_download(session: AsyncSession, application_id: in
     if not app:
         raise ValueError("SOURCE_REMOVED")
     source = await repo.get_delivery_source(session, app.id)
-    snapshot = (app.revision, app.shrankme_url, app.devupload_url)
+    snapshot = (app.revision, app.custom_download_url, app.source_url)
     if source:
         url = website_download_url(app.id)
         if not url:
             raise ValueError("INVALID_SOURCE")
         await session.commit()
         return app, url, "telegram"
-    custom, original = app.shrankme_url, app.devupload_url
+    custom, original = app.custom_download_url, app.source_url
     await session.commit()  # No transaction (including middleware reads) across HTTP.
     direct_source = custom if custom and _is_bzzhr_url(custom) else original if not custom and original and _is_bzzhr_url(original) else None
     if direct_source:
@@ -93,7 +100,7 @@ async def resolve_application_download(session: AsyncSession, application_id: in
         .execution_options(populate_existing=True))
     current_source = await repo.get_delivery_source(session, application_id)
     if (not current or not current.active or not current.published or current_source
-            or (current.revision, current.shrankme_url, current.devupload_url) != snapshot):
+            or (current.revision, current.custom_download_url, current.source_url) != snapshot):
         await session.rollback()
         raise ValueError("SOURCE_CHANGED")
     await session.commit()

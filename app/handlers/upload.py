@@ -63,7 +63,7 @@ def _only_admin(call):
 def _manual_download_hosts() -> set[str]:
     return {
         host.strip().lower()
-        for host in get_settings().LEGACY_DOWNLOAD_ALLOWED_HOSTS.split(",")
+        for host in get_settings().EXTERNAL_DOWNLOAD_ALLOWED_HOSTS.split(",")
         if host.strip()
     }
 
@@ -211,7 +211,9 @@ async def on_external_url(message: Message, state: FSMContext) -> None:
     try:
         url = _validate_manual_download_url(message.text)
     except ValueError as exc:
-        if str(exc) == "HOST_NOT_ALLOWED":
+        if str(exc) == "UNSUPPORTED_PROVIDER":
+            await message.answer("❌ روابط ShrinkMe وDevUploads لم تعد مدعومة. أرسل رابطًا مباشرًا من مصدر آخر.")
+        elif str(exc) == "HOST_NOT_ALLOWED":
             hosts = "، ".join(sorted(_manual_download_hosts()))
             await message.answer(
                 "❌ هذا المضيف غير مسموح للموقع حاليًا.\n"
@@ -220,7 +222,7 @@ async def on_external_url(message: Message, state: FSMContext) -> None:
         else:
             await message.answer("❌ الرابط غير صالح. استخدم HTTPS بدون منفذ أو بيانات دخول أو #fragment.")
         return
-    await state.update_data(devupload_url=url)
+    await state.update_data(source_url=url)
     await state.set_state(UploadStates.waiting_name)
     await message.answer("✅ تم حفظ الرابط. أرسل اسم اللعبة أو التطبيق:", reply_markup=cancel_keyboard())
 
@@ -558,7 +560,7 @@ async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSes
             return
     if (
         not data.get("name")
-        or (manual_external and not data.get("devupload_url"))
+        or (manual_external and not data.get("source_url"))
         or (not manual_external and not data.get("source"))
     ):
         await call.answer("بيانات المسودة غير مكتملة.",show_alert=True)
@@ -577,7 +579,7 @@ async def on_confirm_app(call: CallbackQuery,state: FSMContext,session: AsyncSes
         developer=data.get('developer'),
         icon_file_id=data.get('icon_file_id'),
         image_url=data.get('image_url'),
-        devupload_url=data.get('devupload_url') if manual_external else None,
+        source_url=data.get('source_url') if manual_external else None,
         search_text=build_search_text(data['name'],data.get('category'),data.get('platform'),data.get('description')),
     )
     if manual_external:

@@ -32,6 +32,7 @@ from app.utils.text import append_app_footer, bounded_html, escape_html
 from app.utils.versions import latest_per_family, sort_application_versions
 from database import repositories as repo
 from config import get_settings
+from app.utils.download_policy import is_blocked_download_provider_host
 
 logger = logging.getLogger(__name__)
 router = Router(name="remote_import")
@@ -43,7 +44,7 @@ ALLOWED_EXTENSIONS = {".apk", ".xapk", ".apks", ".aab", ".zip", ".exe", ".msi", 
 
 def _allowed_hosts() -> set[str]:
     settings = get_settings()
-    configured = getattr(settings, "REMOTE_UPLOAD_ALLOWED_HOSTS", "") or settings.LEGACY_DOWNLOAD_ALLOWED_HOSTS
+    configured = getattr(settings, "REMOTE_UPLOAD_ALLOWED_HOSTS", "")
     return {item.strip().lower().rstrip(".") for item in configured.split(",") if item.strip()}
 
 
@@ -56,6 +57,8 @@ def _parse_url(raw: str) -> tuple[str, str]:
         raise ValueError("INVALID_URL") from exc
     if parsed.scheme != "https" or not host or parsed.username or parsed.password or port not in (None, 443) or parsed.fragment:
         raise ValueError("INVALID_URL")
+    if is_blocked_download_provider_host(host):
+        raise ValueError("UNSUPPORTED_PROVIDER")
     if host not in _allowed_hosts():
         raise ValueError("HOST_NOT_ALLOWED")
     filename = unquote(PurePosixPath(parsed.path).name or "")

@@ -11,7 +11,6 @@ def configure_hosts(monkeypatch, hosts="downloads.example.com"):
         "get_settings",
         lambda: SimpleNamespace(
             REMOTE_UPLOAD_ALLOWED_HOSTS=hosts,
-            LEGACY_DOWNLOAD_ALLOWED_HOSTS="legacy.example.com",
         ),
     )
 
@@ -41,8 +40,19 @@ def test_remote_import_rejects_unsafe_or_non_file_urls(monkeypatch, url):
         remote_import._parse_url(url)
 
 
-def test_remote_import_uses_legacy_allowlist_only_when_remote_list_is_blank(monkeypatch):
+def test_remote_import_requires_explicit_remote_allowlist(monkeypatch):
     configure_hosts(monkeypatch, hosts="")
-    assert remote_import._parse_url("https://legacy.example.com/file.zip")[1] == "file.zip"
+    with pytest.raises(ValueError, match="HOST_NOT_ALLOWED"):
+        remote_import._parse_url("https://legacy.example.com/file.zip")
     with pytest.raises(ValueError, match="HOST_NOT_ALLOWED"):
         remote_import._parse_url("https://downloads.example.com/file.zip")
+
+
+@pytest.mark.parametrize("url", [
+    "https://shrinkme.io/app.apk",
+    "https://devuploads.com/app.apk",
+])
+def test_remote_import_always_blocks_retired_providers(monkeypatch, url):
+    configure_hosts(monkeypatch, hosts="shrinkme.io,devuploads.com")
+    with pytest.raises(ValueError, match="UNSUPPORTED_PROVIDER"):
+        remote_import._parse_url(url)

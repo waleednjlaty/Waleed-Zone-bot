@@ -39,7 +39,7 @@ def _is_http_url(value: str | None) -> bool:
 
 
 def _is_steamrip_app(app: Application) -> bool:
-    return bool(app.devupload_url and "steamrip.com" in app.devupload_url.lower())
+    return bool(app.source_url and "steamrip.com" in app.source_url.lower())
 
 
 def _needs_migration(app: Application) -> bool:
@@ -57,7 +57,7 @@ async def _source_image_for_app(app: Application) -> str | None:
 
     if _is_steamrip_app(app):
         try:
-            game_data = await fetch_game_data(app.devupload_url or "")
+            game_data = await fetch_game_data(app.source_url or "")
             fresh_url = game_data.get("image_url")
             if _is_http_url(fresh_url):
                 source_url = fresh_url
@@ -126,7 +126,7 @@ async def migrate_app_images(
                 hosted_url = await uploader.upload_remote_image(
                     source_url,
                     name=image_name,
-                    referer=app.devupload_url if _is_steamrip_app(app) else None,
+                    referer=app.source_url if _is_steamrip_app(app) else None,
                 )
 
         if hosted_url:

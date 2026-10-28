@@ -42,7 +42,7 @@ async def show_app(target: Target, session: AsyncSession, bot: Bot, app_id: int)
         app_id,
         is_fav=is_fav,
         is_admin_user=is_admin(user_id),
-        steamrip_url=app.devupload_url,
+        steamrip_url=app.source_url,
     )
     if len(releases) > 1:
         kb.inline_keyboard.insert(1, [InlineKeyboardButton(

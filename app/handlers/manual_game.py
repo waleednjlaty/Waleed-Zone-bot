@@ -54,7 +54,7 @@ def validate_download_link(value: str) -> str:
     from app.services.download_service import manual_url
     if urlsplit(value).hostname in {"steamrip.com", "www.steamrip.com"}:
         raise ValueError("USE_STEAMRIP_FLOW")
-    return manual_url(value, {h.strip().lower() for h in get_settings().LEGACY_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()})
+    return manual_url(value, {h.strip().lower() for h in get_settings().EXTERNAL_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()})
 
 
 @router.callback_query(AdminCB.filter(F.action == "add_manual_game"))
@@ -92,8 +92,8 @@ async def on_link(message: Message, state: FSMContext):
     except ValueError:
         await message.answer(
             "❌ أرسل رابط تحميل HTTPS صالحًا من نطاق مسموح بالموقع، بدون بيانات دخول "
-            "أو منفذ أو #. لإضافة استضافة جديدة اضبط LEGACY_DOWNLOAD_ALLOWED_HOSTS "
-            "بنفس القائمة في البوت والموقع. روابط صفحات SteamRIP لها خيار «إضافة لعبة».",
+            "أو منفذ أو #. لإضافة استضافة جديدة اضبط EXTERNAL_DOWNLOAD_ALLOWED_HOSTS "
+            "في إعدادات البوت. روابط ShrinkMe وDevUploads لم تعد مدعومة. روابط صفحات SteamRIP لها خيار «إضافة لعبة».",
             reply_markup=_keyboard(),
         )
         return
@@ -257,7 +257,7 @@ async def on_confirm(call: CallbackQuery, state: FSMContext, session: AsyncSessi
                     "icon_file_id",
                 )
             },
-            shrankme_url=link,
+            custom_download_url=link,
             search_text=build_search_text(
                 data["name"], data["category"], data["platform"], data["description"]
             ),

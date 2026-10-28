@@ -6,7 +6,7 @@ Both repositories own the same PostgreSQL `applications` catalog. Neither client
 
 `migrations/002_delivery_sources.sql` is identical in both PRs. Apply it once, explicitly, after review. This change does not apply production migrations. PostgreSQL bot startup checks existing schema without running DDL; SQLite remains a local test/development option only.
 
-`applications.revision` is advanced by a PostgreSQL BEFORE UPDATE trigger. `updated_at` is also maintained by the database. Every source insert/update/delete advances the parent application revision. Traffic-only views/download counters preserve the catalog revision and do not invalidate owner forms or countdowns. Legacy `shrankme_url` and `devupload_url` remain intact. SteamRIP continues to use `devupload_url` as its source page, not an upload-service URL.
+`applications.revision` is advanced by a PostgreSQL BEFORE UPDATE trigger. `updated_at` is also maintained by the database. Every source insert/update/delete advances the parent application revision. Traffic-only views/download counters preserve the catalog revision and do not invalidate owner forms or countdowns. Legacy physical database column names remain for shared website-schema compatibility, while the bot maps them to semantic source/custom URL attributes. SteamRIP uses the source-page field for its game page. ShrinkMe and DevUploads URLs are blocked by the bot's manual-link, import, and download-resolver policies.
 
 `site_delivery_sources` has primary key `(application_id, provider)`, an application FK, provider (`telegram`, `railway-s3`, `s3`), Telegram chat/message/username/file references, filename, byte size, MIME and creation/update timestamps. Telegram rows require a valid public username and positive message ID. Website references may have unknown chat ID/file metadata. Bot references come from a verified `get_chat` + `copy_message` result. No token, API file URL or arbitrary destination URL is stored in this table.
 
@@ -32,7 +32,7 @@ Configure `FILES_CHANNEL_ID` plus `FILES_CHANNEL_USERNAME` on the bot. If BOTH a
 
 Owner Admin → Applications → create/edit metadata → optionally bind `https://t.me/configured_channel/positive_message_id` or a username/message pair → publish. The website only manages metadata. It neither uploads APK bytes nor calls Telegram with bot credentials. Pasted references are validated syntactically and against configured channel; the website cannot attest document existence or MIME without bot access. Use the bot to copy/verify the file; deleted messages or renamed channels require updating the source/configuration.
 
-New catalog write APIs never accept legacy external URL fields. Existing external records remain supported. Bot runtime no longer builds DevUploads/ShrinkMe clients or requires their API keys; those modules are deprecated offline references only.
+New catalog write APIs never accept legacy external URL fields. The bot rejects ShrinkMe/DevUploads URLs when adding manual links, importing files, or resolving old records—even if an allowlist contains them. Their client modules were deleted. The website's independent download-host policy was not changed by this bot-only update.
 
 ## URLs and delivery
 
@@ -44,7 +44,7 @@ Telegram fallback: POST `/api/downloads/legacy/prepare` JSON `{application_id}` 
 
 Set `LEGACY_DOWNLOAD_SIGNING_KEY` to an independent >=32-character random server-only secret. Tokens become ready at exactly 20 seconds, expire 180 seconds after readiness (200 seconds total), use constant-time HMAC verification and bind the HttpOnly/SameSite client cookie. Changing app/source revision, publication or active state invalidates delivery. Stateless grants may be reused by the same browser within their short TTL; they are NOT one-time direct-download grants. Process-wide bounded request shedding is local only, not a distributed rate limiter. The existing secure direct system retains its separate one-time token and shared quota rules.
 
-On the website configure `FILES_CHANNEL_USERNAME` to match the bot (no BOT_TOKEN). `CHANNEL_USERNAME` fallback is allowed only if no FILES configuration exists. Redeem reconstructs the URL; arbitrary database URLs can never become Telegram destinations. Legacy external records use exact `LEGACY_DOWNLOAD_ALLOWED_HOSTS` (default devuploads.com, shrinkme.io, shrinkme.site), HTTPS without credentials, custom ports or fragments. SteamRIP source pages hand off to the existing live bot flow instead of falsely advertising a direct file.
+On the website configure `FILES_CHANNEL_USERNAME` to match the bot (no BOT_TOKEN). `CHANNEL_USERNAME` fallback is allowed only if no FILES configuration exists. Redeem reconstructs the URL; arbitrary database URLs can never become Telegram destinations. For bot-managed manual links, `EXTERNAL_DOWNLOAD_ALLOWED_HOSTS` is empty by default; ShrinkMe/DevUploads domains and subdomains are always rejected. The website's separate `LEGACY_DOWNLOAD_ALLOWED_HOSTS` setting was not changed here. SteamRIP source pages hand off to the existing live bot flow instead of falsely advertising a direct file.
 
 ## Rollout boundary
 

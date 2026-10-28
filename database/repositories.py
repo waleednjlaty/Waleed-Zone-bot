@@ -122,8 +122,8 @@ async def create_application(
     developer: str | None = None,
     image_url: str | None = None,
     icon_file_id: str | None = None,
-    devupload_url: str | None = None,
-    shrankme_url: str | None = None,
+    source_url: str | None = None,
+    custom_download_url: str | None = None,
     search_text: str | None = None,
 ) -> Application:
     app = Application(
@@ -136,8 +136,8 @@ async def create_application(
         developer=developer,
         icon_file_id=icon_file_id,
         image_url=image_url,
-        devupload_url=devupload_url,
-        shrankme_url=shrankme_url,
+        source_url=source_url,
+        custom_download_url=custom_download_url,
         search_text=search_text,
     )
     session.add(app)
