@@ -66,8 +66,9 @@ class Application(Base):
     developer: Mapped[str | None] = mapped_column(String(255), default=None)
     icon_file_id: Mapped[str | None] = mapped_column(String(255), default=None)
     image_url: Mapped[str | None] = mapped_column(Text, default=None)
-    devupload_url: Mapped[str | None] = mapped_column(Text, default=None)
-    shrankme_url: Mapped[str | None] = mapped_column(Text, default=None)
+    # Keep legacy physical column names for compatibility with the shared website DB.
+    source_url: Mapped[str | None] = mapped_column("devupload_url", Text, default=None)
+    custom_download_url: Mapped[str | None] = mapped_column("shrankme_url", Text, default=None)
     downloads: Mapped[int] = mapped_column(Integer, default=0)
     views: Mapped[int] = mapped_column(Integer, default=0)
     search_text: Mapped[str | None] = mapped_column(Text, index=True, default=None)
