@@ -1,4 +1,4 @@
-> Current upload/delivery instructions: [Bot–Website integration](docs/BOT_WEBSITE_INTEGRATION.md). DevUploads/ShrinkMe upload steps below are historical and must not be used for new files. No paid infrastructure is required.
+> Current upload/delivery instructions: [Bot–Website integration](docs/BOT_WEBSITE_INTEGRATION.md). The diagrams below are historical; ShrinkMe/DevUploads client and download flows have been removed from the bot and their domains are blocked. No paid infrastructure is required.
 
 ## 🗺️ خارطة معمارية البوت
 
