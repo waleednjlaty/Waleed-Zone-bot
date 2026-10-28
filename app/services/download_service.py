@@ -30,7 +30,8 @@ _ACTIVE: set[tuple[int, int]] = set()
 def manual_url(value: str, hosts: set[str] | None = None) -> str:
     if len(value) > 2000 or any(c.isspace() for c in value):
         raise ValueError("INVALID_SOURCE")
-    hosts = hosts if hosts is not None else {h.strip().lower() for h in get_settings().EXTERNAL_DOWNLOAD_ALLOWED_HOSTS.split(",") if h.strip()}
+    # Any HTTPS URL with a public destination is accepted; the allowlist is no longer
+    # required for owner-supplied direct download links. Retired ad-link providers stay blocked.
     try:
         host = urlsplit(value).hostname
     except ValueError as exc:
@@ -42,7 +43,7 @@ def manual_url(value: str, hosts: set[str] | None = None) -> str:
         if not re.fullmatch(r"/[A-Za-z0-9_-]+/?", parsed.path) or parsed.query:
             raise ValueError("INVALID_SOURCE")
         return value
-    public_url(value, hosts)
+    public_url(value)
     if urlsplit(value).netloc != urlsplit(value).hostname:
         raise ValueError("INVALID_SOURCE")
     return value
