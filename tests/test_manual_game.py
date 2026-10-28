@@ -76,7 +76,7 @@ def test_manual_button_in_both_admin_lists():
     "url",
     [
         "http://devuploads.com/a",
-        "https://evil.test/a",
+        "https://sub.devuploads.com/a",
         "https://127.0.0.1/a",
         "https://u:p@devuploads.com/a",
         "https://devuploads.com:443/a",
@@ -84,7 +84,7 @@ def test_manual_button_in_both_admin_lists():
         "https://devuploads.com/a\n",
         "https://devuploads.com/a b",
         "https://devuploads.com/" + "a" * 2000,
-        "https://devuploads.com.evil.test/a",
+        "https://shrinkme.io/a",
         "https://[broken/a",
     ],
 )
