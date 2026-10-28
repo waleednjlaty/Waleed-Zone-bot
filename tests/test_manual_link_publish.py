@@ -7,7 +7,7 @@ from app.keyboards.admin import admin_panel_keyboard
 
 
 def _settings(hosts: str):
-    return SimpleNamespace(LEGACY_DOWNLOAD_ALLOWED_HOSTS=hosts)
+    return SimpleNamespace(EXTERNAL_DOWNLOAD_ALLOWED_HOSTS=hosts)
 
 
 def test_admin_panel_has_manual_link_option():
