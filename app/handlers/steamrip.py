@@ -371,7 +371,7 @@ async def on_custom_link_received(
         await state.clear()
         return
 
-    app.shrankme_url = new_link
+    app.custom_download_url = new_link
     await session.commit()
     await message.reply(f"✅ تم تحديث اللعبة {escape_html(app.name)} بالرابط المخصص.")
     await state.clear()
@@ -698,8 +698,8 @@ async def on_rip_confirm(
             platform=data.get("platform"),
             icon_file_id=data.get("icon_file_id"),
             image_url=hosted_image_url or None,
-            devupload_url=source_page_url,
-            shrankme_url=None,
+            source_url=source_page_url,
+            custom_download_url=None,
             search_text=build_search_text(name, data.get("category"), data.get("platform"), data.get("description")),
         )
 
