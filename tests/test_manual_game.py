@@ -59,7 +59,7 @@ async def fill(state):
         size="5 GB",
         platform="Windows",
         category="ألعاب كمبيوتر",
-        download_link="https://devuploads.com/game123",
+        download_link="https://bzzhr.to/game123",
         image_url=None,
         icon_file_id=None,
     )
@@ -95,7 +95,7 @@ def test_unsafe_or_unsupported_links_denied(url):
 
 def test_custom_host_requires_exact_allowlist(monkeypatch):
     monkeypatch.setattr(
-        get_settings(), "LEGACY_DOWNLOAD_ALLOWED_HOSTS", "files.example,devuploads.com"
+        get_settings(), "EXTERNAL_DOWNLOAD_ALLOWED_HOSTS", "files.example,devuploads.com"
     )
     assert (
         flow.validate_download_link("https://files.example/game?id=12")
@@ -103,11 +103,15 @@ def test_custom_host_requires_exact_allowlist(monkeypatch):
     )
     with pytest.raises(ValueError):
         flow.validate_download_link("https://sub.files.example/game")
+    with pytest.raises(ValueError, match="UNSUPPORTED_PROVIDER"):
+        flow.validate_download_link("https://devuploads.com/game")
+    with pytest.raises(ValueError, match="UNSUPPORTED_PROVIDER"):
+        flow.validate_download_link("https://shrinkme.io/game")
 
 
 async def test_collect_complete_manual_flow(state):
     await flow.on_start(event(data="start"), state)
-    await flow.on_link(event(text="https://devuploads.com/game123"), state)
+    await flow.on_link(event(text="https://bzzhr.to/game123"), state)
     for value in ("My Game", "My description", "/skip", "5 GB", "Android"):
         await flow.on_metadata(event(text=value), state)
     await flow.on_category(event(data="manual:mobile"), state)
@@ -134,8 +138,8 @@ async def test_save_shared_catalog_with_external_link_and_no_file(db, state, act
     async with db.session() as session:
         await flow.on_confirm(call, state, session)
         app = (await session.scalars(select(Application))).one()
-        assert app.shrankme_url == "https://devuploads.com/game123"
-        assert app.devupload_url is None and app.published is visible
+        assert app.custom_download_url == "https://bzzhr.to/game123"
+        assert app.source_url is None and app.published is visible
         assert app.active and app.size == "5 GB" and app.version == "1.2"
         assert await session.scalar(select(func.count()).select_from(DeliverySource)) == 0
         assert bool(await repo.get_active_application(session, app.id)) is visible
