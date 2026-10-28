@@ -60,7 +60,7 @@ async def resolve_application_download(session: AsyncSession, application_id: in
             raise ValueError("INVALID_SOURCE")
         await session.commit()
         return app, url, "telegram"
-    custom, original = app.shrankme_url, app.devupload_url
+    custom, original = app.custom_download_url, app.source_url
     await session.commit()  # No transaction (including middleware reads) across HTTP.
     direct_source = custom if custom and _is_bzzhr_url(custom) else original if not custom and original and _is_bzzhr_url(original) else None
     if direct_source:
