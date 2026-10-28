@@ -29,7 +29,7 @@ The original SteamRIP metadata/parser flow was reviewed and preserved. BZZHR pro
 
 Finite BZZHR hosts are `bzzhr.to`, `bzzhr.co`, `buzzheavier.com` plus their explicitly enumerated `www` forms. The only additional file hostname is exact `fafda.to`, justified by the pre-existing fixture `test_hx_redirect_direct_download_is_accepted`. Signed destinations require the expected `/d/...` path and exactly one nonempty `v` query value, with public DNS. Current live CDN behavior is not claimed verified.
 
-The default manual host policy matches the website: `devuploads.com,shrinkme.io,shrinkme.site`. Customized `LEGACY_DOWNLOAD_ALLOWED_HOSTS` must match on both deployments. Shared SQLAlchemy fields (`revision`, active/published/developer, source fields and counters) remain compatible; no catalog columns are deleted or synchronized to another DB.
+The bot's manual host policy now uses `EXTERNAL_DOWNLOAD_ALLOWED_HOSTS`, empty by default. ShrinkMe/DevUploads domains and subdomains are always blocked, including when explicitly allowlisted. The website's separate legacy-host setting was not changed. Shared SQLAlchemy fields (`revision`, active/published/developer, source fields and counters) remain compatible; legacy physical column names are retained for shared-schema compatibility.
 
 CI exposed a missing runtime dependency when SQLAlchemy 2.1 is freshly installed: asyncio now needs the explicit `sqlalchemy[asyncio]` extra. The requirement was corrected so greenlet is installed on fresh production/CI builds.
 
