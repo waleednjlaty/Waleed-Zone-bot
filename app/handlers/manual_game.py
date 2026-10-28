@@ -65,8 +65,9 @@ async def on_start(call: CallbackQuery, state: FSMContext):
     await state.set_state(ManualGameStates.link)
     await call.answer()
     await call.message.answer(
-        "🔗 إضافة لعبة برابط يدوي\n\nأرسل رابط التحميل HTTPS الموجود عندك. "
-        "سيُحفظ الرابط دون تنزيل اللعبة أو رفعها من جديد.",
+        "🔗 إضافة لعبة برابط يدوي\n\nأرسل رابط التحميل المباشر HTTPS من أي استضافة عامة. "
+        "لا تحتاج لإضافة النطاق إلى قائمة مسبقة؛ يجب أن يفتح الرابط ملف اللعبة مباشرة. "
+        "روابط ShrinkMe وDevUploads غير مدعومة.",
         reply_markup=_keyboard(),
     )
 
