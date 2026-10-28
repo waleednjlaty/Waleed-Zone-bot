@@ -104,7 +104,7 @@ async def test_website_created_app_attachment(db):
         bound=await repo.get_delivery_source(session,app.id)
         assert bound.telegram_message_id==42 and bound.filename=='qa.apk'
         assert app.published is False
-        assert app.devupload_url is None and app.shrankme_url is None
+        assert app.source_url is None and app.custom_download_url is None
 
 
 async def test_bot_admin_sees_draft_but_public_does_not(db):
@@ -163,7 +163,7 @@ async def test_steamrip_download_regression(db,monkeypatch):
     monkeypatch.setattr('app.services.download_service.extract_bzzhr_direct_link',extract)
     async with db.session() as session:
         await repo.get_or_create_user(session,111)
-        app=await repo.create_application(session,name='Steam QA',devupload_url='https://steamrip.com/qa-game/',category='ألعاب كمبيوتر',platform='Windows')
+        app=await repo.create_application(session,name='Steam QA',source_url='https://steamrip.com/qa-game/',category='ألعاب كمبيوتر',platform='Windows')
         app.published=True;await session.flush()
         status=SimpleNamespace(edit_text=AsyncMock())
         call=SimpleNamespace(from_user=SimpleNamespace(id=111),answer=AsyncMock(),message=SimpleNamespace(answer=AsyncMock(return_value=status)))
