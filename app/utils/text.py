@@ -96,7 +96,7 @@ def latest_header() -> str:
 
 
 def download_line(app: Application) -> str:
-    return append_app_footer(f"⬇️ رابط التحميل:\n{escape_html(app.shrankme_url or app.devupload_url or '')}")
+    return append_app_footer(f"⬇️ رابط التحميل:\n{escape_html(app.custom_download_url or app.source_url or '')}")
 
 
 def search_prompt() -> str:
