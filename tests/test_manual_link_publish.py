@@ -36,7 +36,7 @@ def test_manual_download_url_accepts_any_public_https_host(monkeypatch, url):
         "https://user:pass@files.example.com/game.zip",
         "https://files.example.com:444/game.zip",
         "https://files.example.com/game.zip#fragment",
-        "https://evil.example/game.zip",
+        "https://127.0.0.1/game.zip",
         "https://files.example.com/game zip",
         "https://shrinkme.io/redirect",
         "https://sub.devuploads.com/file.apk",
