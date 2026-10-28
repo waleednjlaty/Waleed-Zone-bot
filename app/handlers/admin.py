@@ -193,8 +193,8 @@ async def on_app_link(
         return
     from app.utils.website import website_download_url
     text = f"📱 {escape_html(app.name)}\n🌐 {escape_html(website_download_url(app.id) or '')}"
-    if app.devupload_url or app.shrankme_url:
-        text += "\nمصدر legacy محفوظ لهذا التطبيق."
+    if app.source_url or app.custom_download_url:
+        text += "\nرابط مصدر إضافي محفوظ لهذا التطبيق."
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🔙 رجوع", callback_data=AdminCB(action="app_manage", app_id=app.id, page=callback_data.page).pack())]
@@ -353,7 +353,7 @@ async def on_edit_value(
         await state.clear()
         return
     field = data.get("field")
-    if field not in FIELD_LABELS or field in {"devupload_url", "shrankme_url"} or not message.text:
+    if field not in FIELD_LABELS or field in {"source_url", "custom_download_url"} or not message.text:
         await message.answer("❌ الحقل غير مسموح. اربط ملف Telegram بدل رابط خارجي جديد.")
         return
     if app.revision != data.get("expected_revision"):
