@@ -98,10 +98,10 @@ async def on_manual_link_start(call: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(manual_external=True)
     await state.set_state(UploadStates.waiting_external_url)
     await call.answer()
-    hosts = "، ".join(sorted(_manual_download_hosts()))
     await call.message.answer(
-        "🔗 أرسل رابط التحميل المباشر بصيغة HTTPS.\n"
-        f"المصادر المسموحة حاليًا: {escape_html(hosts or 'لا يوجد')}",
+        "🔗 أرسل رابط التحميل المباشر للتطبيق بصيغة HTTPS.\n"
+        "يدعم أي استضافة عامة، مثل files.modder.me، ولا يلزم إضافتها إلى قائمة مسبقة.\n"
+        "يجب أن يفتح الرابط ملف التطبيق مباشرة. روابط ShrinkMe وDevUploads مستثناة.",
         reply_markup=cancel_keyboard(),
     )
 
