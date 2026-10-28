@@ -16,18 +16,17 @@ def test_admin_panel_has_manual_link_option():
     assert "🔗 إضافة برابط" in labels
 
 
-def test_manual_download_url_accepts_allowed_https(monkeypatch):
-    monkeypatch.setattr(
-        upload,
-        "get_settings",
-        lambda: _settings("files.example.com, cdn.example.com"),
-    )
-    assert (
-        upload._validate_manual_download_url(
-            "https://files.example.com/releases/game.zip?token=abc"
-        )
-        == "https://files.example.com/releases/game.zip?token=abc"
-    )
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://files.example.com/releases/game.zip?token=abc",
+        "https://files.modder.me/capcut/CapCut_v19.9.0_Pro.apk",
+        "https://cdn.unknown-host.example/apps/tool.apk",
+    ],
+)
+def test_manual_download_url_accepts_any_public_https_host(monkeypatch, url):
+    monkeypatch.setattr(upload, "get_settings", lambda: _settings(""))
+    assert upload._validate_manual_download_url(url) == url
 
 
 @pytest.mark.parametrize(
@@ -37,8 +36,10 @@ def test_manual_download_url_accepts_allowed_https(monkeypatch):
         "https://user:pass@files.example.com/game.zip",
         "https://files.example.com:444/game.zip",
         "https://files.example.com/game.zip#fragment",
-        "https://evil.example/game.zip",
+        "https://127.0.0.1/game.zip",
         "https://files.example.com/game zip",
+        "https://shrinkme.io/redirect",
+        "https://sub.devuploads.com/file.apk",
         "file:///tmp/game.zip",
     ],
 )

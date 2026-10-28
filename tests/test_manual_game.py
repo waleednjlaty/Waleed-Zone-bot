@@ -76,7 +76,7 @@ def test_manual_button_in_both_admin_lists():
     "url",
     [
         "http://devuploads.com/a",
-        "https://evil.test/a",
+        "https://sub.devuploads.com/a",
         "https://127.0.0.1/a",
         "https://u:p@devuploads.com/a",
         "https://devuploads.com:443/a",
@@ -84,7 +84,7 @@ def test_manual_button_in_both_admin_lists():
         "https://devuploads.com/a\n",
         "https://devuploads.com/a b",
         "https://devuploads.com/" + "a" * 2000,
-        "https://devuploads.com.evil.test/a",
+        "https://shrinkme.io/a",
         "https://[broken/a",
     ],
 )
@@ -93,16 +93,12 @@ def test_unsafe_or_unsupported_links_denied(url):
         flow.validate_download_link(url)
 
 
-def test_custom_host_requires_exact_allowlist(monkeypatch):
-    monkeypatch.setattr(
-        get_settings(), "EXTERNAL_DOWNLOAD_ALLOWED_HOSTS", "files.example,devuploads.com"
-    )
-    assert (
-        flow.validate_download_link("https://files.example/game?id=12")
-        == "https://files.example/game?id=12"
-    )
-    with pytest.raises(ValueError):
-        flow.validate_download_link("https://sub.files.example/game")
+def test_manual_game_accepts_any_public_direct_https_host(monkeypatch):
+    monkeypatch.setattr(get_settings(), "EXTERNAL_DOWNLOAD_ALLOWED_HOSTS", "")
+    assert flow.validate_download_link(
+        "https://files.modder.me/capcut/CapCut_v19.9.0_Pro.apk"
+    ) == "https://files.modder.me/capcut/CapCut_v19.9.0_Pro.apk"
+    assert flow.validate_download_link("https://unknown-host.example/game.zip") == "https://unknown-host.example/game.zip"
     with pytest.raises(ValueError, match="UNSUPPORTED_PROVIDER"):
         flow.validate_download_link("https://devuploads.com/game")
     with pytest.raises(ValueError, match="UNSUPPORTED_PROVIDER"):
