@@ -92,9 +92,9 @@ async def on_link(message: Message, state: FSMContext):
         link = validate_download_link((message.text or "").strip())
     except ValueError:
         await message.answer(
-            "❌ أرسل رابط تحميل HTTPS صالحًا من نطاق مسموح بالموقع، بدون بيانات دخول "
-            "أو منفذ أو #. لإضافة استضافة جديدة اضبط EXTERNAL_DOWNLOAD_ALLOWED_HOSTS "
-            "في إعدادات البوت. روابط ShrinkMe وDevUploads لم تعد مدعومة. روابط صفحات SteamRIP لها خيار «إضافة لعبة».",
+            "❌ أرسل رابط HTTPS صالحًا من استضافة عامة، بدون بيانات دخول أو منفذ أو #. "
+            "لا يلزم إضافة النطاق إلى قائمة مسبقة. روابط ShrinkMe وDevUploads لم تعد مدعومة. "
+            "روابط صفحات SteamRIP لها خيار «إضافة لعبة».",
             reply_markup=_keyboard(),
         )
         return
