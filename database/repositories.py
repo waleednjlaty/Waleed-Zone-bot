@@ -286,6 +286,15 @@ async def rename_application_family(
     if not family:
         family = [source]
 
+    target_name = normalize_application_name(new_name)
+    if any(
+        normalize_application_name(row.name) == target_name
+        and row not in family
+        for row in rows
+    ):
+        # Don't accidentally merge the renamed app into another app's release family.
+        return -1
+
     from app.utils.helpers import build_search_text
 
     for row in family:
