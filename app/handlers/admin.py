@@ -426,6 +426,11 @@ async def on_edit_value(
         return
     if field == "name":
         renamed = await repo.rename_application_family(session, app.id, value)
+        if renamed < 0:
+            await message.answer(
+                "❌ الاسم الجديد يطابق تطبيقًا آخر في المكتبة. اختر اسمًا مختلفًا حتى لا تختلط إصدارات التطبيقات."
+            )
+            return
         await state.clear()
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
