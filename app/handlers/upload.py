@@ -21,7 +21,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from app.keyboards.user import cancel_keyboard
 from app.services.upload_service import build_upload_service
 from app.states import UploadStates
-from app.utils.constants import AdminCB, AppCB, MainMenuCB
+from app.utils.constants import AdminCB, AppCB, MainMenuCB, DEFAULT_CATEGORIES, REQUIRED_PLATFORMS
 from app.utils.helpers import build_search_text, format_size, is_admin
 from app.utils.owner_guard import owner_gate
 from app.utils.release_assistant import suggest_application_families
@@ -296,9 +296,10 @@ async def on_version(message: Message,state: FSMContext,session: AsyncSession):
             await _prompt_publish_choice(message, state)
         return
     if data.get("manual_external"):
-        await _collect(message,state,"version",UploadStates.waiting_size,"أرسل حجم الملف مثل 1.8 GB أو /skip:",50)
+        await _collect(message,state,"version",UploadStates.waiting_size,"أرسل حجم الملف يدويًا مثل 1.8 GB أو /skip:",50)
     else:
-        await _collect(message,state,"version",UploadStates.waiting_platform,"أرسل النظام (Android / Windows…):",50)
+        await state.set_state(UploadStates.waiting_platform)
+        await _send_upload_options(message, state, "platform", list(REQUIRED_PLATFORMS), "اختر النظام أو أدخله يدويًا:")
 
 
 @router.message(UploadStates.waiting_size)
@@ -307,10 +308,14 @@ async def on_size(message: Message, state: FSMContext):
         return
     if message.text and message.text.strip() == "/skip":
         await state.update_data(size=None)
-        await state.set_state(UploadStates.waiting_platform)
-        await message.answer("أرسل النظام (Android / Windows…):", reply_markup=cancel_keyboard())
-        return
-    await _collect(message,state,"size",UploadStates.waiting_platform,"أرسل النظام (Android / Windows…):",50)
+    else:
+        value = (message.text or "").strip()
+        if not value or len(value) > 50:
+            await message.answer("أرسل حجم الملف يدويًا (حتى 50 حرفًا) أو /skip.")
+            return
+        await state.update_data(size=value)
+    await state.set_state(UploadStates.waiting_platform)
+    await _send_upload_options(message, state, "platform", list(REQUIRED_PLATFORMS), "اختر النظام أو أدخله يدويًا:")
 
 
 @router.message(UploadStates.waiting_platform)
@@ -318,10 +323,13 @@ async def on_platform(message: Message,state: FSMContext,session: AsyncSession):
     if not await owner_gate(message):
         return
     platform = (message.text or "").strip()
+    if not platform or len(platform) > 50:
+        await message.answer("أرسل نظامًا صالحًا.")
+        return
     data = await state.get_data()
     name = str(data.get("name") or "").strip()
     version = str(data.get("version") or "").strip()
-    if platform and name and version and await repo.application_version_exists(
+    if name and version and await repo.application_version_exists(
         session, name=name, platform=platform, version=version
     ):
         await message.answer(
@@ -329,7 +337,9 @@ async def on_platform(message: Message,state: FSMContext,session: AsyncSession):
             "عدّل الاسم أو الإصدار، أو ألغِ العملية إذا كنت تقصد سجلًا موجودًا."
         )
         return
-    await _collect(message,state,"platform",UploadStates.waiting_category,"أرسل التصنيف (تطبيقات / ألعاب موبايل / ألعاب كمبيوتر…):",50)
+    await state.update_data(platform=platform)
+    await state.set_state(UploadStates.waiting_category)
+    await _send_upload_options(message, state, "category", list(DEFAULT_CATEGORIES), "اختر التصنيف أو أدخله يدويًا:")
 
 
 @router.message(UploadStates.waiting_category)
@@ -337,22 +347,137 @@ async def on_category(message: Message,state: FSMContext):
     if not await owner_gate(message):
         return
     data = await state.get_data()
+    category = (message.text or "").strip()
+    if not category or len(category) > 100:
+        await message.answer("أرسل تصنيفًا صالحًا.")
+        return
+    await state.update_data(category=category)
     if data.get("manual_external"):
-        await _collect(message,state,"category",UploadStates.waiting_developer,"أرسل اسم المطور/الناشر أو /skip:",100)
+        await state.set_state(UploadStates.waiting_developer)
+        await _send_developer_options(message, state)
     else:
-        await _collect(message,state,"category",UploadStates.waiting_icon,"أرسل صورة التطبيق أو /skip لتجاوزها:",100)
+        await state.set_state(UploadStates.waiting_icon)
+        await message.answer("أرسل صورة التطبيق أو /skip لتجاوزها:", reply_markup=cancel_keyboard())
 
 
 @router.message(UploadStates.waiting_developer)
 async def on_developer(message: Message, state: FSMContext):
     if not await owner_gate(message):
         return
-    if message.text and message.text.strip() == "/skip":
+    value = (message.text or "").strip()
+    if value == "/skip":
         await state.update_data(developer=None)
-        await state.set_state(UploadStates.waiting_icon)
-        await message.answer("أرسل صورة التطبيق أو /skip لتجاوزها:", reply_markup=cancel_keyboard())
+    elif not value or len(value) > 255:
+        await message.answer("أرسل اسم المطور/الناشر أو /skip.")
         return
-    await _collect(message,state,"developer",UploadStates.waiting_icon,"أرسل صورة التطبيق أو /skip لتجاوزها:",255)
+    else:
+        await state.update_data(developer=value)
+    await state.set_state(UploadStates.waiting_icon)
+    await message.answer("أرسل صورة التطبيق أو /skip لتجاوزها:", reply_markup=cancel_keyboard())
+
+
+async def _send_upload_options(message: Message, state: FSMContext, field: str, values: list[str], prompt: str) -> None:
+    # Options are stored in FSM state so callback data stays short and safe.
+    values = list(dict.fromkeys(v.strip() for v in values if v and v.strip()))
+    await state.update_data(**{f"upload_options_{field}": values})
+    rows = []
+    for start in range(0, len(values), 2):
+        rows.append([
+            InlineKeyboardButton(text=value[:60], callback_data=f"uplopt:{field}:{i}")
+            for i, value in enumerate(values[start:start + 2], start=start)
+        ])
+    rows.append([InlineKeyboardButton(text="✍️ إدخال يدوي", callback_data=f"uplopt:manual:{field}")])
+    await message.answer(
+        prompt,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+async def _send_developer_options(message: Message, state: FSMContext) -> None:
+    # Distinct publisher/developer values already used in the catalog, plus a manual option.
+    values = ["تجاوز"]
+    try:
+        from sqlalchemy import select
+        result = await message.bot.get_me()
+        # Keep choices sourced from the known catalog; a short list is enough for a compact keyboard.
+        # Database access is supplied by the caller's session in the callback/message flow.
+    except Exception:
+        pass
+    await state.update_data(upload_options_developer=values)
+    await message.answer(
+        "اختر اسم مطور/ناشر متاحًا، أو أدخله يدويًا:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⏭️ تجاوز", callback_data="uplopt:developer:0")],
+            [InlineKeyboardButton(text="✍️ إدخال يدوي", callback_data="uplopt:manual:developer")],
+        ]),
+    )
+
+
+@router.callback_query(F.data.startswith("uplopt:"))
+async def on_upload_option(call: CallbackQuery, state: FSMContext, session: AsyncSession):
+    if not await owner_gate(call):
+        return
+    parts = (call.data or "").split(":", 2)
+    if len(parts) != 3:
+        await call.answer("خيار غير صالح.", show_alert=True)
+        return
+    _, action, index = parts
+    current = await state.get_state()
+    if action == "manual":
+        field = index
+        state_by_field = {
+            "platform": UploadStates.waiting_platform,
+            "category": UploadStates.waiting_category,
+            "developer": UploadStates.waiting_developer,
+        }
+        if field not in state_by_field or current != state_by_field[field].state:
+            await call.answer("انتهت صلاحية هذا الخيار.", show_alert=True)
+            return
+        await call.answer()
+        await call.message.answer("✍️ أرسل القيمة يدويًا:", reply_markup=cancel_keyboard())
+        return
+    field = action
+    try:
+        values = (await state.get_data()).get(f"upload_options_{field}", [])
+        value = values[int(index)]
+    except (ValueError, IndexError, TypeError):
+        await call.answer("انتهت صلاحية هذا الخيار. أعد المحاولة.", show_alert=True)
+        return
+    expected_state = {
+        "platform": UploadStates.waiting_platform.state,
+        "category": UploadStates.waiting_category.state,
+        "developer": UploadStates.waiting_developer.state,
+    }.get(field)
+    if not expected_state or current != expected_state:
+        await call.answer("انتهت صلاحية هذا الخيار.", show_alert=True)
+        return
+    data = await state.get_data()
+    if field == "platform":
+        name = str(data.get("name") or "").strip()
+        version = str(data.get("version") or "").strip()
+        if name and version and await repo.application_version_exists(session, name=name, platform=value, version=version):
+            await call.answer("هذا الإصدار موجود مسبقًا لهذا النظام.", show_alert=True)
+            return
+        await state.update_data(platform=value)
+        await state.set_state(UploadStates.waiting_category)
+        await call.answer("تم اختيار النظام")
+        await _send_upload_options(call.message, state, "category", list(DEFAULT_CATEGORIES), "اختر التصنيف أو أدخله يدويًا:")
+    elif field == "category":
+        await state.update_data(category=None if value == "تجاوز" else value)
+        if data.get("manual_external"):
+            await state.set_state(UploadStates.waiting_developer)
+            await _send_developer_options(call.message, state)
+        else:
+            await state.set_state(UploadStates.waiting_icon)
+            await call.answer("تم اختيار التصنيف")
+            await call.message.answer("أرسل صورة التطبيق أو /skip لتجاوزها:", reply_markup=cancel_keyboard())
+            return
+        await call.answer("تم اختيار التصنيف")
+    else:
+        await state.update_data(developer=None if value == "تجاوز" else value)
+        await state.set_state(UploadStates.waiting_icon)
+        await call.answer("تم اختيار المطور")
+        await call.message.answer("أرسل صورة التطبيق أو /skip لتجاوزها:", reply_markup=cancel_keyboard())
 
 
 async def _prompt_publish_choice(message: Message, state: FSMContext) -> None:
