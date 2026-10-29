@@ -299,7 +299,7 @@ async def on_version(message: Message,state: FSMContext,session: AsyncSession):
         await _collect(message,state,"version",UploadStates.waiting_size,"أرسل حجم الملف يدويًا مثل 1.8 GB أو /skip:",50)
     else:
         await state.set_state(UploadStates.waiting_platform)
-        await _send_upload_options(message, state, "platform", list(REQUIRED_PLATFORMS), "اختر النظام أو أدخله يدويًا:")
+        await _send_catalog_options(message, state, session, "platform", "اختر النظام المتوفر أو أدخله يدويًا:")
 
 
 @router.message(UploadStates.waiting_size)
@@ -315,7 +315,7 @@ async def on_size(message: Message, state: FSMContext):
             return
         await state.update_data(size=value)
     await state.set_state(UploadStates.waiting_platform)
-    await _send_upload_options(message, state, "platform", list(REQUIRED_PLATFORMS), "اختر النظام أو أدخله يدويًا:")
+    await _send_catalog_options(message, state, session, "platform", "اختر النظام المتوفر أو أدخله يدويًا:")
 
 
 @router.message(UploadStates.waiting_platform)
@@ -339,7 +339,7 @@ async def on_platform(message: Message,state: FSMContext,session: AsyncSession):
         return
     await state.update_data(platform=platform)
     await state.set_state(UploadStates.waiting_category)
-    await _send_upload_options(message, state, "category", list(DEFAULT_CATEGORIES), "اختر التصنيف أو أدخله يدويًا:")
+    await _send_catalog_options(message, state, session, "category", "اختر تصنيفًا مستخدمًا في المكتبة أو أدخله يدويًا:")
 
 
 @router.message(UploadStates.waiting_category)
@@ -374,6 +374,34 @@ async def on_developer(message: Message, state: FSMContext):
         await state.update_data(developer=value)
     await state.set_state(UploadStates.waiting_icon)
     await message.answer("أرسل صورة التطبيق أو /skip لتجاوزها:", reply_markup=cancel_keyboard())
+
+
+async def _send_catalog_options(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    field: str,
+    prompt: str,
+) -> None:
+    """Present metadata choices already used by the catalog, with safe manual entry."""
+    if field not in {"platform", "category"}:
+        raise ValueError("Unsupported catalog option field")
+    column = getattr(Application, field)
+    result = await session.execute(
+        select(column)
+        .where(column.is_not(None), column != "")
+        .distinct()
+        .order_by(column)
+        .limit(16)
+    )
+    values = [str(row[0]).strip() for row in result.all() if str(row[0]).strip()]
+    # Empty libraries still need an obvious first-run path; manual entry always remains available.
+    if not values:
+        values = list(REQUIRED_PLATFORMS if field == "platform" else DEFAULT_CATEGORIES)
+        prompt = ("لا توجد أنظمة مسجلة بعد. اختر قيمة شائعة أو أدخلها يدويًا:"
+                  if field == "platform" else
+                  "لا توجد تصنيفات مسجلة بعد. اختر تصنيفًا شائعًا أو أدخله يدويًا:")
+    await _send_upload_options(message, state, field, values, prompt)
 
 
 async def _send_upload_options(message: Message, state: FSMContext, field: str, values: list[str], prompt: str) -> None:
@@ -465,7 +493,7 @@ async def on_upload_option(call: CallbackQuery, state: FSMContext, session: Asyn
         await state.update_data(platform=value)
         await state.set_state(UploadStates.waiting_category)
         await call.answer("تم اختيار النظام")
-        await _send_upload_options(call.message, state, "category", list(DEFAULT_CATEGORIES), "اختر التصنيف أو أدخله يدويًا:")
+        await _send_catalog_options(call.message, state, session, "category", "اختر تصنيفًا مستخدمًا في المكتبة أو أدخله يدويًا:")
     elif field == "category":
         await state.update_data(category=None if value == "تجاوز" else value)
         if data.get("manual_external"):
