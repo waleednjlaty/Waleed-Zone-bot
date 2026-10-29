@@ -343,7 +343,7 @@ async def on_platform(message: Message,state: FSMContext,session: AsyncSession):
 
 
 @router.message(UploadStates.waiting_category)
-async def on_category(message: Message,state: FSMContext):
+async def on_category(message: Message,state: FSMContext, session: AsyncSession):
     if not await owner_gate(message):
         return
     data = await state.get_data()
@@ -354,7 +354,7 @@ async def on_category(message: Message,state: FSMContext):
     await state.update_data(category=category)
     if data.get("manual_external"):
         await state.set_state(UploadStates.waiting_developer)
-        await _send_developer_options(message, state)
+        await _send_developer_options(message, state, session)
     else:
         await state.set_state(UploadStates.waiting_icon)
         await message.answer("أرسل صورة التطبيق أو /skip لتجاوزها:", reply_markup=cancel_keyboard())
@@ -393,25 +393,29 @@ async def _send_upload_options(message: Message, state: FSMContext, field: str, 
     )
 
 
-async def _send_developer_options(message: Message, state: FSMContext) -> None:
-    # Distinct publisher/developer values already used in the catalog, plus a manual option.
-    values = ["تجاوز"]
-    try:
-        from sqlalchemy import select
-        result = await message.bot.get_me()
-        # Keep choices sourced from the known catalog; a short list is enough for a compact keyboard.
-        # Database access is supplied by the caller's session in the callback/message flow.
-    except Exception:
-        pass
-    await state.update_data(upload_options_developer=values)
-    await message.answer(
-        "اختر اسم مطور/ناشر متاحًا، أو أدخله يدويًا:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⏭️ تجاوز", callback_data="uplopt:developer:0")],
-            [InlineKeyboardButton(text="✍️ إدخال يدوي", callback_data="uplopt:manual:developer")],
-        ]),
+async def _send_developer_options(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    # Offer distinct developer/publisher names already present in the catalog.
+    result = await session.execute(
+        select(Application.developer)
+        .where(Application.developer.is_not(None), Application.developer != "")
+        .distinct()
+        .order_by(Application.developer)
+        .limit(20)
     )
-
+    values = ["تجاوز", *[str(row[0]).strip() for row in result.all() if str(row[0]).strip()]]
+    values = list(dict.fromkeys(values))
+    await state.update_data(upload_options_developer=values)
+    rows = []
+    for i, value in enumerate(values):
+        rows.append([InlineKeyboardButton(
+            text=("⏭️ تجاوز" if value == "تجاوز" else value[:60]),
+            callback_data=f"uplopt:developer:{i}",
+        )])
+    rows.append([InlineKeyboardButton(text="✍️ إدخال يدوي", callback_data="uplopt:manual:developer")])
+    await message.answer(
+        "اختر اسم مطور/ناشر من الموجود، أو أدخله يدويًا:",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
 
 @router.callback_query(F.data.startswith("uplopt:"))
 async def on_upload_option(call: CallbackQuery, state: FSMContext, session: AsyncSession):
@@ -466,7 +470,7 @@ async def on_upload_option(call: CallbackQuery, state: FSMContext, session: Asyn
         await state.update_data(category=None if value == "تجاوز" else value)
         if data.get("manual_external"):
             await state.set_state(UploadStates.waiting_developer)
-            await _send_developer_options(call.message, state)
+            await _send_developer_options(call.message, state, session)
         else:
             await state.set_state(UploadStates.waiting_icon)
             await call.answer("تم اختيار التصنيف")
