@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DB_URL = f"sqlite+aiosqlite:///{BASE_DIR / 'bot.db'}"
 _SQLITE_PREFIX = "sqlite+aiosqlite:///"
+CANONICAL_WEBSITE_URL = "https://www.waleedzone.xyz"
 
 
 def normalize_database_url(url: str) -> str:
@@ -16,6 +17,20 @@ def normalize_database_url(url: str) -> str:
         if path and not path.startswith(("/", "\\", ":")):
             return f"{_SQLITE_PREFIX}{BASE_DIR / path}"
     return url
+
+
+def normalize_website_url(url: str) -> str:
+    """Use the canonical public host when a legacy Railway URL is configured."""
+    normalized = url.strip().rstrip("/")
+    if normalized in {
+        "http://waleed-zone.up.railway.app",
+        "https://waleed-zone.up.railway.app",
+        "http://www.waleedzone.xyz",
+        "https://waleedzone.xyz",
+        "http://waleedzone.xyz",
+    }:
+        return CANONICAL_WEBSITE_URL
+    return normalized
 
 
 class Settings(BaseSettings):
@@ -29,8 +44,12 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def _anchor_paths(self) -> "Settings":
+    def _normalize_settings(self) -> "Settings":
         self.DATABASE_URL = normalize_database_url(self.DATABASE_URL)
+        self.WEBSITE_BASE_URL = normalize_website_url(self.WEBSITE_BASE_URL)
+        self.WEBSITE_STATS_URL = normalize_website_url(self.WEBSITE_STATS_URL)
+        if self.WEBSITE_STATS_URL.rstrip("/").endswith("/api/stats"):
+            self.WEBSITE_STATS_URL = self.WEBSITE_BASE_URL + "/api/stats"
         return self
 
     BOT_TOKEN: str = Field(repr=False)
@@ -49,8 +68,8 @@ class Settings(BaseSettings):
     HTTP_MAX_RETRIES: int = 3
     DOWNLOAD_DIR: Path = BASE_DIR / "tmp" / "uploads"
 
-    WEBSITE_BASE_URL: str = "https://waleed-zone.up.railway.app"
-    WEBSITE_STATS_URL: str = "https://waleed-zone.up.railway.app/api/stats"
+    WEBSITE_BASE_URL: str = CANONICAL_WEBSITE_URL
+    WEBSITE_STATS_URL: str = CANONICAL_WEBSITE_URL + "/api/stats"
     WEBSITE_STATS_TOKEN: str | None = Field(default=None, repr=False)
 
     # Direct URL imports and external download links require explicit allowlists.
