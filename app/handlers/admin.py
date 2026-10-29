@@ -305,15 +305,28 @@ async def on_rename_app(
     )
     await call.answer()
     await call.message.answer(
-        f"✏️ تعديل اسم التطبيق الحالي: {escape_html(app.name)}\\n\\n"
+        f"✏️ تعديل اسم التطبيق الحالي: {escape_html(app.name)}\n\n"
         "أرسل الاسم الجديد. سيتم تحديث الاسم لجميع إصدارات التطبيق المرتبطة به.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(
                 text="❌ إلغاء",
-                callback_data=AdminCB(action="app_manage", app_id=app.id, page=callback_data.page).pack(),
+                callback_data=AdminCB(action="rename_cancel", app_id=app.id, page=callback_data.page).pack(),
             )
         ]]),
     )
+
+
+@router.callback_query(AdminCB.filter(F.action == "rename_cancel"))
+async def on_rename_cancel(
+    call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await owner_gate(call):
+        return
+    if not _guard(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    await state.clear()
+    await on_app_manage(call, callback_data, session)
 
 
 @router.callback_query(AdminCB.filter(F.action == "edit_app"))
