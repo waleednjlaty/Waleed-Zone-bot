@@ -266,6 +266,38 @@ async def update_application(session: AsyncSession, app: Application) -> None:
     await session.flush()
 
 
+async def rename_application_family(
+    session: AsyncSession, app_id: int, new_name: str
+) -> int:
+    """Rename all catalog rows belonging to the same app, including old releases and platforms."""
+    source = await get_application(session, app_id)
+    if source is None:
+        return 0
+
+    family_name = normalize_application_name(source.name)
+    if not family_name:
+        return 0
+
+    rows = list((await session.scalars(select(Application))).all())
+    family = [
+        row for row in rows
+        if normalize_application_name(row.name) == family_name
+    ]
+    if not family:
+        family = [source]
+
+    from app.utils.helpers import build_search_text
+
+    for row in family:
+        row.name = new_name
+        row.search_text = build_search_text(
+            row.name, row.category, row.platform, row.description
+        )
+
+    await session.flush()
+    return len(family)
+
+
 async def set_application_active(
     session: AsyncSession, app_id: int, active: bool
 ) -> None:
