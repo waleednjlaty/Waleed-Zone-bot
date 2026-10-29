@@ -303,7 +303,7 @@ async def on_version(message: Message,state: FSMContext,session: AsyncSession):
 
 
 @router.message(UploadStates.waiting_size)
-async def on_size(message: Message, state: FSMContext):
+async def on_size(message: Message, state: FSMContext, session: AsyncSession):
     if not await owner_gate(message):
         return
     if message.text and message.text.strip() == "/skip":
