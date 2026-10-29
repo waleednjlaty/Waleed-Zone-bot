@@ -282,6 +282,40 @@ async def on_toggle_app(
 
 
 # ---------------------------------------------------------------- تعديل تطبيق
+@router.callback_query(AdminCB.filter(F.action == "rename_app"))
+async def on_rename_app(
+    call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await owner_gate(call):
+        return
+    if not _guard(call):
+        await call.answer("⛔ صلاحية غير متاحة.", show_alert=True)
+        return
+    app = await repo.get_application(session, callback_data.app_id)
+    if app is None:
+        await call.answer("التطبيق غير موجود.", show_alert=True)
+        return
+
+    await state.set_state(EditAppStates.waiting_value)
+    await state.update_data(
+        app_id=app.id,
+        page=callback_data.page,
+        field="name",
+        expected_revision=app.revision,
+    )
+    await call.answer()
+    await call.message.answer(
+        f"✏️ تعديل اسم التطبيق الحالي: {escape_html(app.name)}\\n\\n"
+        "أرسل الاسم الجديد. سيتم تحديث الاسم لجميع إصدارات التطبيق المرتبطة به.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="❌ إلغاء",
+                callback_data=AdminCB(action="app_manage", app_id=app.id, page=callback_data.page).pack(),
+            )
+        ]]),
+    )
+
+
 @router.callback_query(AdminCB.filter(F.action == "edit_app"))
 async def on_edit_app(
     call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession
@@ -377,8 +411,27 @@ async def on_edit_value(
     ):
         await message.answer("❌ هذا الإصدار مسجّل مسبقًا لهذا التطبيق والنظام. أدخل رقم إصدار مختلفًا.")
         return
+    if field == "name":
+        renamed = await repo.rename_application_family(session, app.id, value)
+        await state.clear()
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="🔙 عرض التطبيق",
+                callback_data=AdminCB(action="app_manage", app_id=app.id, page=data.get("page", 0)).pack(),
+            )],
+            [InlineKeyboardButton(
+                text="📱 إدارة التطبيقات",
+                callback_data=AdminCB(action="apps", page=data.get("page", 0)).pack(),
+            )],
+        ])
+        await message.answer(
+            f"✅ تم تحديث الاسم إلى <b>{escape_html(value)}</b> وتطبيقه على {renamed} سجل/إصدار مرتبط.",
+            reply_markup=keyboard,
+        )
+        return
+
     setattr(app, field, value)
-    if field in ("name", "category", "platform", "description"):
+    if field in ("category", "platform", "description"):
         from app.utils.helpers import build_search_text
 
         app.search_text = build_search_text(
