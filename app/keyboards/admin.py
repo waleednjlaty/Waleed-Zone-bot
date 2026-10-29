@@ -64,9 +64,10 @@ def app_manage_keyboard(app_id: int, active: bool, page: int, website_url: str |
     kb = [
         [InlineKeyboardButton(text="🆕 إضافة تحديث", callback_data=AdminCB(action="new_release", app_id=app_id, page=page).pack())],
         [
-            InlineKeyboardButton(text="✏️ تعديل", callback_data=AdminCB(action="edit_app", app_id=app_id, page=page).pack()),
+            InlineKeyboardButton(text="✏️ تعديل الاسم", callback_data=AdminCB(action="rename_app", app_id=app_id, page=page).pack()),
             InlineKeyboardButton(text="📦 أرشفة", callback_data=AdminCB(action="delete_ask", app_id=app_id, page=page).pack()),
         ],
+        [InlineKeyboardButton(text="📝 تعديل باقي البيانات", callback_data=AdminCB(action="edit_app", app_id=app_id, page=page).pack())],
         [
             InlineKeyboardButton(text="🔗 رابط التحميل", callback_data=AdminCB(action="app_link", app_id=app_id, page=page).pack()),
             InlineKeyboardButton(text="📊 إحصائيات", callback_data=AdminCB(action="app_stats", app_id=app_id, page=page).pack()),
