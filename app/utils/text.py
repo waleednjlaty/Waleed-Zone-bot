@@ -11,7 +11,7 @@ APP_DOWNLOAD_FOOTER = (
     "━━━━━━━━━━━━━━\n"
     "🎮 لتحميل الألعاب والتطبيقات بسهولة:\n"
     "🤖 البوت: @Waleedzone_bot\n"
-    "🌐 الموقع: https://waleed-zone.up.railway.app/"
+    "🌐 الموقع: https://waleedzone.xyz/"
 )
 
 
