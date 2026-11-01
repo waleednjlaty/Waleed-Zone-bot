@@ -113,13 +113,18 @@ async def on_open_app(call: CallbackQuery, callback_data: AppCB, session: AsyncS
 
 @router.callback_query(AppCB.filter(F.action == "versions"))
 async def on_previous_versions(call: CallbackQuery, callback_data: AppCB, session: AsyncSession) -> None:
-    if call.message is None or not hasattr(call.message, "edit_text"):
+    message = call.message
+    if message is None:
         await call.answer("تعذر فتح سجل الإصدارات.", show_alert=True)
         return
-    releases = sort_application_versions(await repo.list_application_versions(session, callback_data.app_id))
+
+    releases = sort_application_versions(
+        await repo.list_application_versions(session, callback_data.app_id)
+    )
     if len(releases) < 2:
         await call.answer("لا توجد إصدارات سابقة لهذا التطبيق.", show_alert=True)
         return
+
     rows = []
     for release in releases:
         version = (release.version or "إصدار غير محدد").strip()[:24]
@@ -127,14 +132,39 @@ async def on_previous_versions(call: CallbackQuery, callback_data: AppCB, sessio
         label = f"{'🟢 ' if release.id == callback_data.app_id else '📦 '}{version}"
         if platform:
             label += f" · {platform}"
-        rows.append([InlineKeyboardButton(text=label[:60], callback_data=AppCB(action="open", app_id=release.id).pack())])
-    rows.append([InlineKeyboardButton(text="⬅️ العودة للتطبيق", callback_data=AppCB(action="open", app_id=callback_data.app_id).pack())])
-    await call.answer()
-    await call.message.edit_text(
-        f"📚 إصدارات {escape_html(releases[0].name or 'التطبيق')}\n"
-        "اختر الإصدار المطلوب. الإصدارات الأحدث تظهر أولًا:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        rows.append([
+            InlineKeyboardButton(
+                text=label[:60],
+                callback_data=AppCB(action="open", app_id=release.id).pack(),
+            )
+        ])
+
+    rows.append([
+        InlineKeyboardButton(
+            text="⬅️ العودة للتطبيق",
+            callback_data=AppCB(action="open", app_id=callback_data.app_id).pack(),
+        )
+    ])
+    text = (
+        f"📚 إصدارات {escape_html(releases[0].name or 'التطبيق')}\\n"
+        "اختر الإصدار المطلوب. الإصدارات الأحدث تظهر أولًا:"
     )
+    keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
+
+    # App details are often sent with a photo. Telegram rejects edit_text on
+    # media messages; those must be edited through their caption instead.
+    try:
+        if message.text is not None:
+            await message.edit_text(text, reply_markup=keyboard)
+        else:
+            await message.edit_caption(caption=text, reply_markup=keyboard)
+    except Exception:
+        logger.exception(
+            "Failed to display previous versions for app_id=%s",
+            callback_data.app_id,
+        )
+        await message.answer(text, reply_markup=keyboard)
+    await call.answer()
 
 
 @router.callback_query(AppCB.filter(F.action == "download"))
