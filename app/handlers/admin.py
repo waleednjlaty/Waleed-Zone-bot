@@ -727,6 +727,18 @@ async def on_welcome_message(
     await message.answer("✅ تم حفظ رسالة الترحيب.", reply_markup=back_to_menu_keyboard())
 
 
+async def _render_protection_settings(
+    call: CallbackQuery, session: AsyncSession
+) -> None:
+    anti_spam = await repo.get_setting_bool(session, "anti_spam_enabled", True)
+    warn_limit = parse_int(await repo.get_setting(session, "warn_limit", "3"), 3)
+    warn_action = await repo.get_setting(session, "warn_action", "mute") or "mute"
+    await call.message.edit_text(
+        "🛡 إعدادات الحماية:",
+        reply_markup=protection_settings_keyboard(anti_spam, warn_limit, warn_action),
+    )
+
+
 @router.callback_query(AdminCB.filter(F.action == "protection"))
 async def on_protection(
     call: CallbackQuery, session: AsyncSession
@@ -737,13 +749,7 @@ async def on_protection(
         await call.answer("⛔", show_alert=True)
         return
     await call.answer()
-    anti_spam = await repo.get_setting_bool(session, "anti_spam_enabled", True)
-    warn_limit = parse_int(await repo.get_setting(session, "warn_limit", "3"), 3)
-    warn_action = await repo.get_setting(session, "warn_action", "mute") or "mute"
-    await call.message.edit_text(
-        "🛡 إعدادات الحماية:",
-        reply_markup=protection_settings_keyboard(anti_spam, warn_limit, warn_action),
-    )
+    await _render_protection_settings(call, session)
 
 
 @router.callback_query(AdminCB.filter(F.action.in_(["spam_on", "spam_off"])))
@@ -755,7 +761,7 @@ async def on_spam_toggle(
     enabled = callback_data.action == "spam_on"
     await repo.set_setting(session, "anti_spam_enabled", "1" if enabled else "0")
     await call.answer("✅ تم الحفظ")
-    await on_protection(call, session)
+    await _render_protection_settings(call, session)
 
 
 @router.callback_query(AdminCB.filter(F.action == "warn_limit_edit"))
@@ -794,10 +800,20 @@ async def on_warn_action_toggle(
     new_action = "ban" if current == "mute" else "mute"
     await repo.set_setting(session, "warn_action", new_action)
     await call.answer("✅ تم تبديل إجراء التحذيرات")
-    await on_protection(call, session)
+    await _render_protection_settings(call, session)
 
 
 # ---------------------------------------------------------------- الكلمات المحظورة
+async def _render_banned_words(
+    call: CallbackQuery, session: AsyncSession
+) -> None:
+    words = await repo.list_banned_words(session)
+    await call.message.edit_text(
+        "🚫 الكلمات المحظورة\nاضغط على أي كلمة لحذفها:",
+        reply_markup=banned_words_keyboard(words),
+    )
+
+
 @router.callback_query(AdminCB.filter(F.action == "banned_words"))
 async def on_banned_words(call: CallbackQuery, session: AsyncSession) -> None:
     if not await owner_gate(call):
@@ -806,11 +822,7 @@ async def on_banned_words(call: CallbackQuery, session: AsyncSession) -> None:
         await call.answer("⛔", show_alert=True)
         return
     await call.answer()
-    words = await repo.list_banned_words(session)
-    await call.message.edit_text(
-        "🚫 الكلمات المحظورة\nاضغط على أي كلمة لحذفها:",
-        reply_markup=banned_words_keyboard(words),
-    )
+    await _render_banned_words(call, session)
 
 
 @router.callback_query(AdminCB.filter(F.action == "bw_add"))
@@ -858,7 +870,7 @@ async def on_banned_word_delete(
         return
     removed = await repo.remove_banned_word(session, callback_data.word)
     await call.answer("🗑 تم الحذف" if removed else "⚠️ الكلمة غير موجودة")
-    await on_banned_words(call, session)
+    await _render_banned_words(call, session)
 
 
 # ---------------------------------------------------------------- الإعدادات
