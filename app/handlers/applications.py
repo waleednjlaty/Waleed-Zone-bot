@@ -136,6 +136,7 @@ async def on_previous_versions(call: CallbackQuery, callback_data: AppCB, sessio
         await call.answer("لا توجد إصدارات سابقة لهذا التطبيق.", show_alert=True)
         return
 
+    await call.answer()
     rows = []
     for release in releases:
         version = (release.version or "إصدار غير محدد").strip()[:24]
@@ -175,7 +176,6 @@ async def on_previous_versions(call: CallbackQuery, callback_data: AppCB, sessio
             callback_data.app_id,
         )
         await message.answer(text, reply_markup=keyboard)
-    await call.answer()
 
 
 @router.callback_query(AppCB.filter(F.action == "download"))
