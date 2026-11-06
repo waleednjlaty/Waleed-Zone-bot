@@ -88,3 +88,19 @@ async def test_archive_application_reports_missing_records_and_archives_existing
         assert archived.published is False
 
         assert await repo.archive_application(session, 999999) is False
+
+
+@pytest.mark.asyncio
+async def test_favorite_mutations_report_whether_state_changed(db):
+    async with db.session() as session:
+        user = await repo.get_or_create_user(
+            session, telegram_id=555001, username="fav-idempotent"
+        )
+        app = await repo.create_application(
+            session, name="FavoriteState", search_text="favoritestate"
+        )
+
+        assert await repo.add_favorite(session, user.telegram_id, app.id) is True
+        assert await repo.add_favorite(session, user.telegram_id, app.id) is False
+        assert await repo.remove_favorite(session, user.telegram_id, app.id) is True
+        assert await repo.remove_favorite(session, user.telegram_id, app.id) is False

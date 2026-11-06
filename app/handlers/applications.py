@@ -191,15 +191,25 @@ async def on_toggle_favorite(call: CallbackQuery, callback_data: AppCB, session:
         await call.answer("❌ التطبيق غير متوفر.", show_alert=True)
         return
     if callback_data.action == "fav":
-        await repo.add_favorite(session, call.from_user.id, app.id)
-        msg = "❤️ أُضيف إلى المفضلة"
+        changed = await repo.add_favorite(session, call.from_user.id, app.id)
+        msg = (
+            "❤️ أُضيف إلى المفضلة"
+            if changed
+            else "ℹ️ التطبيق موجود بالفعل في المفضلة."
+        )
+        is_fav = True
     else:
-        await repo.remove_favorite(session, call.from_user.id, app.id)
-        msg = "💔 أُزيل من المفضلة"
+        changed = await repo.remove_favorite(session, call.from_user.id, app.id)
+        msg = (
+            "💔 أُزيل من المفضلة"
+            if changed
+            else "ℹ️ التطبيق غير موجود في المفضلة أصلًا."
+        )
+        is_fav = False
     await call.answer(msg)
     kb = app_detail_keyboard(
         app.id,
-        is_fav=callback_data.action == "fav",
+        is_fav=is_fav,
         is_admin_user=is_admin(call.from_user.id),
         steamrip_url=app.source_url,
     )
