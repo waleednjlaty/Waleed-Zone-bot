@@ -204,11 +204,11 @@ async def on_app_link(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
-    await call.answer()
     app = await repo.get_application(session, callback_data.app_id)
     if app is None:
-        await call.answer("التطبيق غير موجود.", show_alert=True)
+        await call.answer("التطبيق غير موجود أو حُذف.", show_alert=True)
         return
+    await call.answer()
     from app.utils.website import website_download_url
     text = f"📱 {escape_html(app.name)}\n🌐 {escape_html(website_download_url(app.id) or '')}"
     if app.source_url or app.custom_download_url:
@@ -230,11 +230,11 @@ async def on_app_stats(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
-    await call.answer()
     app = await repo.get_application(session, callback_data.app_id)
     if app is None:
-        await call.answer("التطبيق غير موجود.", show_alert=True)
+        await call.answer("التطبيق غير موجود أو حُذف.", show_alert=True)
         return
+    await call.answer()
     text = await app_stats(session, app)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -269,9 +269,29 @@ async def on_delete_yes(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
+    app = await repo.get_application(session, callback_data.app_id)
+    if app is None:
+        await call.answer("التطبيق غير موجود أو تمت أرشفته مسبقًا.", show_alert=True)
+        return
+
     await repo.archive_application(session, callback_data.app_id)
-    await call.answer("🗑 تمت أرشفة التطبيق")
-    await on_apps_management(call, callback_data, session)
+    await call.answer("🗑 تمت أرشفة التطبيق بنجاح.")
+
+    apps = await repo.list_applications(
+        session, active_only=False, public_only=False, limit=200
+    )
+    page, total_pages = paginate(len(apps), callback_data.page, PER_PAGE)
+    chunk = apps[page * PER_PAGE : (page + 1) * PER_PAGE]
+    text = (
+        "📱 إدارة التطبيقات\\n"
+        f"📦 التطبيقات المحمّلة: {len(apps)} · الصفحة {page + 1}/{total_pages}\\n"
+        "────────────\\n"
+    )
+    if not chunk:
+        text += "لا توجد تطبيقات في المكتبة بعد. يمكنك رفع ملف أو إضافة تطبيق برابط من الأزرار أدناه."
+    await call.message.edit_text(
+        text, reply_markup=apps_management_keyboard(chunk, page, total_pages)
+    )
 
 
 @router.callback_query(AdminCB.filter(F.action == "toggle"))
@@ -560,11 +580,11 @@ async def on_publish_app(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
-    await call.answer()
     app = await repo.get_application(session, callback_data.app_id)
     if app is None:
-        await call.answer("التطبيق غير موجود.", show_alert=True)
+        await call.answer("التطبيق غير موجود أو حُذف.", show_alert=True)
         return
+    await call.answer()
     from app.handlers.upload import _publish_to_channel
 
     await _publish_to_channel(call, session, app)
