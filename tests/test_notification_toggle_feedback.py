@@ -13,6 +13,7 @@ async def test_repeated_enable_notifications_reports_already_enabled(monkeypatch
         answer=AsyncMock(),
         message=SimpleNamespace(edit_text=AsyncMock()),
     )
+    session = object()
     monkeypatch.setattr(
         start.repo, "get_user",
         AsyncMock(return_value=SimpleNamespace(notifications_enabled=True)),
@@ -20,10 +21,10 @@ async def test_repeated_enable_notifications_reports_already_enabled(monkeypatch
     set_notifications = AsyncMock()
     monkeypatch.setattr(start.repo, "set_user_notifications", set_notifications)
 
-    await start.on_notifications(call, SimpleNamespace(enabled=1), session=object())
+    await start.on_notifications(call, SimpleNamespace(enabled=1), session=session)
 
     call.answer.assert_awaited_once_with("ℹ️ الإشعارات مفعّلة بالفعل.")
-    set_notifications.assert_awaited_once_with(call.__dict__.get("session", object()) if False else object(), 123, True)
+    set_notifications.assert_awaited_once_with(session, 123, True)
     keyboard = call.message.edit_text.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].text == "🔔 تفعيل ✅"
 
