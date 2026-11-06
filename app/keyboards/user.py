@@ -104,7 +104,7 @@ def apps_list_keyboard(
         kb.append(
             [InlineKeyboardButton(
                 text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "source_url", None)) else (f"📱 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"📱 {str(app.name or 'تطبيق')[:45]}"),
-                **({"url": _steamrip_page_url(getattr(app, "source_url", None))} if _steamrip_page_url(getattr(app, "source_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
+                callback_data=AppCB(action="open", app_id=app.id).pack(),
             )]
         )
     if total_pages > 1:
@@ -130,7 +130,7 @@ def latest_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboardMa
         kb.append(
             [InlineKeyboardButton(
                 text=(f"🎮 {str(app.name or 'لعبة')[:30]} · v{str(app.version)[:20]}" if app.version else f"🎮 {str(app.name or 'لعبة')[:45]}") if _steamrip_page_url(getattr(app, "source_url", None)) else (f"🆕 {str(app.name or 'تطبيق')[:30]} · v{str(app.version)[:20]}" if app.version else f"🆕 {str(app.name or 'تطبيق')[:45]}"),
-                **({"url": _steamrip_page_url(getattr(app, "source_url", None))} if _steamrip_page_url(getattr(app, "source_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
+                callback_data=AppCB(action="open", app_id=app.id).pack(),
             )]
         )
     if total_pages > 1:
@@ -151,7 +151,7 @@ def favorites_keyboard(apps: list, page: int, total_pages: int) -> InlineKeyboar
         kb.append(
             [InlineKeyboardButton(
                 text=f"🎮 {app.name}" if _steamrip_page_url(getattr(app, "source_url", None)) else f"❤️ {app.name}",
-                **({"url": _steamrip_page_url(getattr(app, "source_url", None))} if _steamrip_page_url(getattr(app, "source_url", None)) else {"callback_data": AppCB(action="open", app_id=app.id).pack()}),
+                callback_data=AppCB(action="open", app_id=app.id).pack(),
             )]
         )
     if total_pages > 1:
