@@ -41,7 +41,10 @@ async def on_request_message(
 ) -> None:
     app_name = (message.text or "").strip()
     if not app_name:
-        await message.answer("📱 اكتب اسم التطبيق أولًا.")
+        await message.answer(
+            "📱 أرسل اسم التطبيق كنص، وليس صورة أو ملفًا.\n"
+            "مثال: CapCut Pro أو Photoshop."
+        )
         return
     if len(app_name) > 80:
         await message.answer("⚠️ اسم التطبيق طويل جدًا. اختصره إلى 80 حرفًا كحد أقصى.")
@@ -56,8 +59,9 @@ async def on_request_message(
     await state.clear()
 
     await message.answer(
-        "✅ تم استلام طلبك!\n"
-        "سنحاول إضافة التطبيق بأسرع وقت ممكن.",
+        f"✅ تم استلام طلبك بنجاح!\n"
+        f"🧾 رقم الطلب: #{req.id}\n\n"
+        "سنراجع طلبك، وسنرسل لك إشعارًا عند تحديث حالته.",
         reply_markup=back_to_menu_keyboard(),
     )
 
