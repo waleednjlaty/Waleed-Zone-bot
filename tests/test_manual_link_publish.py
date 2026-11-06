@@ -51,3 +51,15 @@ def test_manual_download_url_rejects_unsafe_or_unlisted_urls(monkeypatch, url):
     )
     with pytest.raises(ValueError):
         upload._validate_manual_download_url(url)
+
+
+
+def test_attachment_success_keyboard_offers_clear_admin_next_steps():
+    keyboard = upload._attachment_result_keyboard(42)
+    buttons = [button for row in keyboard.inline_keyboard for button in row]
+    assert [button.text for button in buttons] == [
+        "⚙️ فتح إدارة التطبيق",
+        "📱 إدارة التطبيقات",
+    ]
+    assert buttons[0].callback_data == "admin:app_manage:42:0"
+    assert buttons[1].callback_data == "admin:apps:0:0"
