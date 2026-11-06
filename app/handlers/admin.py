@@ -127,7 +127,8 @@ async def on_requests_list(
     chunk = requests[page * PER_PAGE_REQUESTS : (page + 1) * PER_PAGE_REQUESTS]
     text = (
         "📥 طلبات التطبيقات\n"
-        f"📦 الطلبات المحمّلة: {len(requests)} · الصفحة {page + 1}/{total_pages}\n"
+        f"📦 أحدث الطلبات المعروضة: {len(requests)} · الصفحة {page + 1}/{total_pages}\n"
+        "🔖 الرقم بجانب كل طلب هو رقم الطلب الفعلي.\n"
         "────────────\n"
     )
     if not chunk:
