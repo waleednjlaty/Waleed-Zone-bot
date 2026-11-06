@@ -221,7 +221,7 @@ class GroupService:
             )
             return f"🔨 تم حظر @{target.from_user.username or target.from_user.id}."
         except Exception:
-            return "❌ تعذر الحظر (تأكد من صلاحيات البوت)."
+            return "❌ تعذّر حظر العضو. تحقّق من أن البوت يملك صلاحية حظر الأعضاء، وأن العضو ليس مشرفًا."
 
     async def unban_member(self, bot: Bot, session: AsyncSession, message: Message) -> str:
         target = message.reply_to_message
@@ -232,7 +232,7 @@ class GroupService:
             await message.delete()
             return f"🔓 تم فك الحظر عن @{target.from_user.username or target.from_user.id}."
         except Exception:
-            return "❌ تعذر فك الحظر."
+            return "❌ تعذّر فك الحظر. تحقّق من أن البوت مشرف ويملك صلاحية حظر الأعضاء."
 
     async def mute_member(self, bot: Bot, session: AsyncSession, message: Message) -> str:
         target = message.reply_to_message
@@ -249,7 +249,7 @@ class GroupService:
             await message.delete()
             return f"🔇 تم كتم @{target.from_user.username or target.from_user.id}."
         except Exception:
-            return "❌ تعذر الكتم."
+            return "❌ تعذّر كتم العضو. تحقّق من أن البوت يملك صلاحية تقييد الأعضاء، وأن العضو ليس مشرفًا."
 
     async def unmute_member(self, bot: Bot, session: AsyncSession, message: Message) -> str:
         target = message.reply_to_message
@@ -264,7 +264,7 @@ class GroupService:
             await message.delete()
             return f"🔊 تم فك الكتم عن @{target.from_user.username or target.from_user.id}."
         except Exception:
-            return "❌ تعذر فك الكتم."
+            return "❌ تعذّر فك الكتم. تحقّق من أن البوت مشرف ويملك صلاحية تقييد الأعضاء."
 
     async def delete_message(self, bot: Bot, message: Message) -> None:
         if message.reply_to_message is None:
@@ -297,7 +297,7 @@ class GroupService:
             await message.delete()
             return "📌 تم تثبيت الرسالة."
         except Exception:
-            return "❌ تعذر تثبيت الرسالة."
+            return "❌ تعذّر تثبيت الرسالة. تحقّق من أن البوت مشرف ويملك صلاحية تثبيت الرسائل."
 
     async def promote_member(self, bot: Bot, session: AsyncSession, message: Message) -> str:
         target = message.reply_to_message
@@ -374,7 +374,7 @@ class GroupService:
             await message.delete()
             return "🔓 تم فتح المجموعة للأعضاء."
         except Exception:
-            return "❌ تعذر فتح المجموعة."
+            return "❌ تعذّر فتح المجموعة. تحقّق من أن البوت مشرف ويملك صلاحية تغيير أذونات المجموعة."
 
     async def get_user_id(self, message: Message) -> str:
         target = message.reply_to_message
