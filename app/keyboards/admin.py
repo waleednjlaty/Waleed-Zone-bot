@@ -110,9 +110,17 @@ def requests_keyboard(requests: list, page: int, total_pages: int) -> InlineKeyb
     kb: list[list[InlineKeyboardButton]] = []
     if not requests:
         kb.append([_button("📭 لا توجد طلبات حالياً", "noop")])
-    for i, req in enumerate(requests, start=page * 10 + 1):
+    status_labels = {
+        "pending": "🆕 جديد",
+        "processing": "⏳ قيد المعالجة",
+        "completed": "✅ منفّذ",
+        "rejected": "❌ مرفوض",
+    }
+    for req in requests:
+        status = status_labels.get(str(req.status), str(req.status))
+        app_name = str(req.app_name or "تطبيق غير مسمّى").replace("\n", " ")[:30]
         kb.append([InlineKeyboardButton(
-            text=f"{req.status} #{i} — {req.app_name[:30]}",
+            text=f"{status} · #{req.id} · {app_name}",
             callback_data=ReqCB(action="manage", req_id=req.id).pack(),
         )])
     if total_pages > 1:
