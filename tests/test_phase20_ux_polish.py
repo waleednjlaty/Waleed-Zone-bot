@@ -25,9 +25,9 @@ def test_request_keyboard_uses_real_request_ids_and_readable_statuses():
         "✅ منفّذ · #912 · Blender",
     ]
     assert callbacks == [
-        "request:manage:731",
-        "request:manage:804",
-        "request:manage:912",
+        "req:manage:731",
+        "req:manage:804",
+        "req:manage:912",
     ]
 
 
