@@ -289,9 +289,9 @@ async def on_delete_yes(
     page, total_pages = paginate(len(apps), callback_data.page, PER_PAGE)
     chunk = apps[page * PER_PAGE : (page + 1) * PER_PAGE]
     text = (
-        "📱 إدارة التطبيقات\\n"
-        f"📦 التطبيقات المحمّلة: {len(apps)} · الصفحة {page + 1}/{total_pages}\\n"
-        "────────────\\n"
+        "📱 إدارة التطبيقات\n"
+        f"📦 التطبيقات المحمّلة: {len(apps)} · الصفحة {page + 1}/{total_pages}\n"
+        "────────────\n"
     )
     if not chunk:
         text += "لا توجد تطبيقات في المكتبة بعد. يمكنك رفع ملف أو إضافة تطبيق برابط من الأزرار أدناه."
