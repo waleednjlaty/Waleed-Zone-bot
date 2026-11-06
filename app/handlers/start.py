@@ -202,8 +202,22 @@ async def on_notifications(
 ) -> None:
     """تفعيل/إيقاف إشعارات التطبيقات الجديدة للمستخدم."""
     enabled = callback_data.enabled == 1
+    current_user = await repo.get_user(session, call.from_user.id)
+    already_in_state = (
+        current_user is not None
+        and bool(current_user.notifications_enabled) == enabled
+    )
     await repo.set_user_notifications(session, call.from_user.id, enabled)
-    status = "🔔 تم تفعيل الإشعارات" if enabled else "🔕 تم إيقاف الإشعارات"
+
+    if already_in_state:
+        status = (
+            "ℹ️ الإشعارات مفعّلة بالفعل."
+            if enabled
+            else "ℹ️ الإشعارات متوقفة بالفعل."
+        )
+    else:
+        status = "🔔 تم تفعيل الإشعارات" if enabled else "🔕 تم إيقاف الإشعارات"
+
     await call.answer(status)
     await call.message.edit_text(
         f"{status}\nسنخبرك عند إضافة تطبيقات جديدة.",
