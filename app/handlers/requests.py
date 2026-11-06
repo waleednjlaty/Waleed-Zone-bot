@@ -38,6 +38,9 @@ async def on_request_message(
     if not app_name:
         await message.answer("📱 اكتب اسم التطبيق أولًا.")
         return
+    if len(app_name) > 80:
+        await message.answer("⚠️ اسم التطبيق طويل جدًا. اختصره إلى 80 حرفًا كحد أقصى.")
+        return
 
     req = await repo.create_app_request(
         session,
