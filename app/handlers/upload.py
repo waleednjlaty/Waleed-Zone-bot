@@ -180,7 +180,8 @@ async def on_file(message: Message, state: FSMContext, session: AsyncSession) ->
         return
     if not message.document:
         await message.answer(
-            "أرسل الملف كمستند Telegram (وليس كصورة أو نص).",
+            "📎 أرسل ملف التطبيق كمستند Telegram، وليس كصورة أو رسالة نصية.\\n"
+            "الصيغ المدعومة: APK وZIP وEXE. يمكنك إعادة المحاولة أو الإلغاء من الزر أدناه.",
             reply_markup=cancel_keyboard(),
         )
         return
@@ -192,7 +193,12 @@ async def on_file(message: Message, state: FSMContext, session: AsyncSession) ->
     except Exception:
         # Provider errors may contain credential-bearing URLs. Never echo/log them.
         logger.warning("Telegram file copy failed")
-        await message.answer("❌ تعذر النسخ. تحقق من إعدادات قناة الملفات العامة وصلاحية البوت وقيود الرسالة.")
+        await message.answer(
+            "❌ تعذر نسخ الملف إلى قناة الملفات.\\n"
+            "تحقق من أن القناة عامة، وأن البوت يملك صلاحية النشر، وأن الملف قابل لإعادة التوجيه. "
+            "لم تُحفظ بيانات التطبيق؛ أعد إرسال الملف بعد تصحيح المشكلة.",
+            reply_markup=cancel_keyboard(),
+        )
         return
     if data.get("attach_app_id"):
         try:
