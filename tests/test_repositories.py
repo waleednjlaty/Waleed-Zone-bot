@@ -69,3 +69,22 @@ async def test_favorites_flow(db):
         await repo.remove_favorite(session, user.telegram_id, app.id)
         is_fav2 = await repo.is_favorite(session, user.telegram_id, app.id)
         assert is_fav2 is False
+
+
+@pytest.mark.asyncio
+async def test_archive_application_reports_missing_records_and_archives_existing_ones(db):
+    async with db.session() as session:
+        app = await repo.create_application(
+            session, name="ArchiveMe", search_text="archiveme"
+        )
+        app_id = app.id
+        app.active = True
+        app.published = True
+        await session.flush()
+
+        assert await repo.archive_application(session, app_id) is True
+        archived = await repo.get_application(session, app_id)
+        assert archived.active is False
+        assert archived.published is False
+
+        assert await repo.archive_application(session, 999999) is False
