@@ -445,13 +445,15 @@ async def add_favorite(session: AsyncSession, user_id: int, app_id: int) -> bool
     return True
 
 
-async def remove_favorite(session: AsyncSession, user_id: int, app_id: int) -> None:
-    await session.execute(
+async def remove_favorite(session: AsyncSession, user_id: int, app_id: int) -> bool:
+    """إزالة تطبيق من المفضلة. يعيد True فقط إذا حُذف سجل موجود."""
+    result = await session.execute(
         delete(Favorite).where(
             Favorite.user_id == user_id, Favorite.app_id == app_id
         )
     )
     await session.flush()
+    return bool(result.rowcount)
 
 
 async def is_favorite(session: AsyncSession, user_id: int, app_id: int) -> bool:
