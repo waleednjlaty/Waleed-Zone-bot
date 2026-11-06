@@ -103,7 +103,11 @@ def download_line(app: Application) -> str:
 
 
 def search_prompt() -> str:
-    return "🔎 اكتب اسم التطبيق الذي تبحث عنه.\n\nمثال: capcut"
+    return (
+        "🔎 اكتب اسم التطبيق أو اللعبة التي تبحث عنها.\n\n"
+        "يمكنك البحث بالعربية أو الإنجليزية، واكتب الاسم بشكل مختصر للحصول على نتائج أفضل.\n"
+        "مثال: capcut أو فوتوشوب"
+    )
 
 
 def request_prompt() -> str:

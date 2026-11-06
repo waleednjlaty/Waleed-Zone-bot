@@ -59,12 +59,16 @@ async def on_search_query(
         )
         await message.answer(
             f"❌ لم أجد تطبيقًا باسم «{escape_html(query)}».\n"
-            "تأكد من الاسم أو جرب كلمة أخرى.",
+            "جرّب كتابة الاسم بالعربية أو الإنجليزية، أو استخدم كلمة أقصر من اسم التطبيق.",
             reply_markup=kb,
         )
         return
 
-    lines = [f"🔎 نتائج البحث عن «{escape_html(query)}»:", ""]
+    lines = [
+        f"🔎 نتائج البحث عن «{escape_html(query)}»:",
+        f"📦 عُثر على {len(apps)} نتيجة (نعرض أفضل 10 نتائج).",
+        "",
+    ]
     kb_rows: list[list[InlineKeyboardButton]] = []
     for i, app in enumerate(apps, start=1):
         lines.append(f"{i}. {escape_html(app.name)}")

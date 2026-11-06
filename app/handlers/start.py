@@ -23,6 +23,7 @@ from app.middlewares import is_subscribed
 from app.utils.constants import MainMenuCB, NotifCB
 from app.utils.helpers import is_admin
 from config import get_settings
+from app.utils.website import website_download_url
 from database import repositories as repo
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,11 @@ async def on_start(message: Message, session: AsyncSession, bot: Bot, state: FSM
                 parse_mode="Markdown",
             )
         elif pending_record.status == "pending":
-            web_url = f"https://waleed-zone.up.railway.app/download/{pending_record.app_id}?token={token}"
+            download_url = website_download_url(pending_record.app_id)
+            if not download_url:
+                await message.answer("❌ رابط الموقع غير متاح حاليًا. حاول لاحقًا.")
+                return
+            web_url = f"{download_url}?token={token}"
             await message.answer(
                 "⚠️ **لم يتم تأكيد اجتياز التحقق في المتصفح بعد.**\n\n"
                 "يرجى فتح الرابط التالي في المتصفح لإتمام التحقق ثم الضغط على زر العودة هنا مرة أخرى:\n"
