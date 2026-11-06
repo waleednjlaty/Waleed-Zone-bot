@@ -24,7 +24,7 @@ from app.utils.catalog import (
     visible_categories,
 )
 from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB
-from app.utils.helpers import paginate
+from app.utils.helpers import is_admin, paginate
 from app.utils.versions import latest_per_family, sort_application_versions
 from app.utils.text import escape_html
 from database import repositories as repo
@@ -75,7 +75,12 @@ async def on_apps_list(call: CallbackQuery, callback_data: AppsCB, session: Asyn
         header = "📱 جميع التطبيقات والألعاب"
     else:
         header = f"🗂 تصنيف: {escape_html(category)}"
-    text = f"{header}\n────────────\n" if chunk else "لا توجد تطبيقات في هذا القسم."
+    text = (
+        f"{header}\n"
+        f"📦 عدد النتائج: {len(apps)} · الصفحة {page + 1}/{total_pages}\n"
+        "────────────\n"
+        if chunk else "لا توجد تطبيقات في هذا القسم.\n\nجرّب تصنيفًا آخر أو ارجع إلى جميع التطبيقات."
+    )
     await call.message.edit_text(text, reply_markup=apps_list_keyboard(chunk, category, page, total_pages))
 
 
@@ -88,7 +93,10 @@ async def on_latest(call: CallbackQuery, callback_data: LatestCB, session: Async
     if not chunk:
         text, kb = "🆕 لا توجد تطبيقات بعد.", back_to_menu_keyboard()
     else:
-        text, kb = "🆕 أحدث التطبيقات\n────────────\n", latest_keyboard(chunk, page, total_pages)
+        text, kb = (
+            f"🆕 أحدث التطبيقات\n📦 عدد النتائج: {len(apps)} · الصفحة {page + 1}/{total_pages}\n────────────\n",
+            latest_keyboard(chunk, page, total_pages),
+        )
     await call.message.edit_text(text, reply_markup=kb)
 
 
@@ -101,7 +109,10 @@ async def on_favorites(call: CallbackQuery, callback_data: FavsCB, session: Asyn
     if not chunk:
         text, kb = "❤️ لا توجد تطبيقات في المفضلة بعد.\n\nافتح أي تطبيق واضغط على «إضافة للمفضلة».", back_to_menu_keyboard()
     else:
-        text, kb = "❤️ تطبيقاتي المفضلة\n────────────\n", favorites_keyboard(chunk, page, total_pages)
+        text, kb = (
+            f"❤️ تطبيقاتي المفضلة\n📦 عدد النتائج: {len(apps)} · الصفحة {page + 1}/{total_pages}\n────────────\n",
+            favorites_keyboard(chunk, page, total_pages),
+        )
     await call.message.edit_text(text, reply_markup=kb)
 
 
