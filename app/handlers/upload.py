@@ -73,6 +73,20 @@ def _validate_manual_download_url(value: str) -> str:
     return manual_url(value.strip(), _manual_download_hosts())
 
 
+def _attachment_result_keyboard(app_id: int) -> InlineKeyboardMarkup:
+    """Give the owner a direct next step after attaching a Telegram file."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="⚙️ فتح إدارة التطبيق",
+            callback_data=AdminCB(action="app_manage", app_id=app_id, page=0).pack(),
+        )],
+        [InlineKeyboardButton(
+            text="📱 إدارة التطبيقات",
+            callback_data=AdminCB(action="apps", page=0).pack(),
+        )],
+    ])
+
+
 @router.callback_query(AppCB.filter(F.action == "upload"))
 @router.callback_query(AdminCB.filter(F.action == "add_app"))
 async def on_upload_start(call: CallbackQuery, state: FSMContext) -> None:
@@ -165,7 +179,10 @@ async def on_file(message: Message, state: FSMContext, session: AsyncSession) ->
         await message.answer("⛔ صلاحية غير متاحة.")
         return
     if not message.document:
-        await message.answer("أرسل الملف كمستند Telegram.")
+        await message.answer(
+            "أرسل الملف كمستند Telegram (وليس كصورة أو نص).",
+            reply_markup=cancel_keyboard(),
+        )
         return
     data = await state.get_data()
     try:
@@ -187,7 +204,10 @@ async def on_file(message: Message, state: FSMContext, session: AsyncSession) ->
             await message.answer("⚠️ تغيّر التطبيق أثناء الربط. افتحه مجددًا. النسخة المنسوخة بقيت في قناة الملفات دون ربط.")
             return
         await state.clear()
-        await message.answer("✅ تم ربط الملف بالموقع والبوت.")
+        await message.answer(
+            "✅ تم ربط الملف بنجاح. أصبح مصدر التحميل متاحًا للموقع والبوت.",
+            reply_markup=_attachment_result_keyboard(data["attach_app_id"]),
+        )
         return
     await state.update_data(source=source,size=format_size(source.get("size_bytes") or 0))
     if data.get("release_from_app_id"):
@@ -198,7 +218,10 @@ async def on_file(message: Message, state: FSMContext, session: AsyncSession) ->
         )
         return
     await state.set_state(UploadStates.waiting_name)
-    await message.answer("✅ تم نسخ الملف. أرسل اسم التطبيق:")
+    await message.answer(
+        "✅ تم نسخ الملف. الخطوة التالية: أرسل اسم التطبيق:",
+        reply_markup=cancel_keyboard(),
+    )
 
 
 @router.message(UploadStates.waiting_external_url)
