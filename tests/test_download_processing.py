@@ -175,7 +175,7 @@ def test_encoded_destination_fails_closed(url):
     assert not extractor._looks_like_direct_download(url)
 
 
-async def test_bot_reports_source_failure_with_stable_website_link(monkeypatch):
+async def test_bot_reports_source_failure_with_actionable_website_button(monkeypatch):
     async def blocked(session, app_id):
         raise ValueError("BZZHR_NOT_FOUND")
     monkeypatch.setattr(service, "resolve_application_download", blocked)
@@ -185,8 +185,21 @@ async def test_bot_reports_source_failure_with_stable_website_link(monkeypatch):
     session = SimpleNamespace(rollback=AsyncMock())
     await service.send_application_download(call, session, 54)
     sent = call.message.answer.await_args.args[0]
-    assert "https://waleed-zone.up.railway.app/download/54" in sent
+    keyboard = call.message.answer.await_args.kwargs["reply_markup"]
+    assert "لم نعثر على رابط تحميل صالح" in sent
     assert "BZZHR_NOT_FOUND" not in sent
+    assert "https://waleed-zone.up.railway.app/download/54" not in sent
+    assert keyboard.inline_keyboard[0][0].url == "https://waleed-zone.up.railway.app/download/54"
+
+
+@pytest.mark.parametrize(("code", "expected"), [
+    ("SOURCE_CHANGED", "تغيّر مصدر التحميل"),
+    ("PROVIDER_RATE_LIMITED", "طلبات التحميل كثيرة"),
+    ("PROVIDER_FORBIDDEN", "المصدر رفض طلب التحميل"),
+    ("UNKNOWN_INTERNAL_CODE", "تعذّر تجهيز التحميل"),
+])
+def test_download_error_messages_are_user_friendly(code, expected):
+    assert expected in service._download_error_message(code)
 
 
 @pytest.mark.parametrize("code", ["PROVIDER_CHALLENGE", "PROVIDER_LOGIN_REQUIRED", "PROVIDER_RATE_LIMITED", "PROVIDER_FORBIDDEN"])
