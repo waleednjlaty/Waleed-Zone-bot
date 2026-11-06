@@ -91,6 +91,21 @@ def delete_confirm_keyboard(app_id: int, page: int) -> InlineKeyboardMarkup:
     ]])
 
 
+def toggle_confirm_keyboard(app_id: int, page: int, target_active: bool) -> InlineKeyboardMarkup:
+    action = "toggle_apply_on" if target_active else "toggle_apply_off"
+    confirm_label = "✅ نعم، فعّل التطبيق" if target_active else "🚫 نعم، عطّل التطبيق"
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text=confirm_label,
+            callback_data=AdminCB(action=action, app_id=app_id, page=page).pack(),
+        ),
+        InlineKeyboardButton(
+            text="❌ إلغاء",
+            callback_data=AdminCB(action="app_manage", app_id=app_id, page=page).pack(),
+        ),
+    ]])
+
+
 def requests_keyboard(requests: list, page: int, total_pages: int) -> InlineKeyboardMarkup:
     kb: list[list[InlineKeyboardButton]] = []
     if not requests:
