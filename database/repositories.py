@@ -691,12 +691,15 @@ async def bind_telegram_source(session: AsyncSession, app_id: int, metadata: dic
     return source
 
 
-async def archive_application(session: AsyncSession, app_id: int) -> None:
+async def archive_application(session: AsyncSession, app_id: int) -> bool:
+    """Archive an application, returning False when it no longer exists."""
     app = await get_application(session, app_id)
-    if app:
-        app.active = False
-        app.published = False
-        await session.flush()
+    if app is None:
+        return False
+    app.active = False
+    app.published = False
+    await session.flush()
+    return True
 # --------------------------------------------------------------------------
 # Pending downloads
 # --------------------------------------------------------------------------
