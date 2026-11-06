@@ -63,6 +63,15 @@ FIELD_LABELS = {
 }
 
 
+def _edit_cancel_keyboard(app_id: int, page: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text="❌ إلغاء والعودة للتطبيق",
+            callback_data=AdminCB(action="edit_cancel", app_id=app_id, page=page).pack(),
+        )
+    ]])
+
+
 def _guard(call: CallbackQuery) -> bool:
     if is_admin(call.from_user.id):
         return True
@@ -363,7 +372,10 @@ async def on_edit_app(
             )]
         )
     rows.append(
-        [InlineKeyboardButton(text="❌ إلغاء", callback_data=AdminCB(action="app_manage", app_id=callback_data.app_id, page=callback_data.page).pack())]
+        [InlineKeyboardButton(
+            text="❌ إلغاء والعودة للتطبيق",
+            callback_data=AdminCB(action="edit_cancel", app_id=callback_data.app_id, page=callback_data.page).pack(),
+        )]
     )
     await call.message.edit_text(
         "✏️ اختر الحقل الذي تريد تعديله:",
@@ -380,16 +392,36 @@ async def on_edit_field(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
+    if await state.get_state() != EditAppStates.choosing_field.state:
+        await call.answer("انتهت صلاحية هذه القائمة. افتح تعديل التطبيق مجددًا.", show_alert=True)
+        return
     field = call.data.split(":", 1)[1]
+    if field not in FIELD_LABELS or field == "name":
+        await call.answer("الحقل غير صالح. اختر أحد الحقول المعروضة.", show_alert=True)
+        return
+    data = await state.get_data()
+    app_id = int(data.get("app_id") or 0)
+    page = int(data.get("page") or 0)
     await state.update_data(field=field)
     await state.set_state(EditAppStates.waiting_value)
     await call.answer()
     await call.message.answer(
-        f"أرسل القيمة الجديدة لحقل «{FIELD_LABELS.get(field, field)}»:",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="❌ إلغاء", callback_data=MainMenuCB(action="main").pack())]]
-        ),
+        f"أرسل القيمة الجديدة لحقل «{FIELD_LABELS[field]}»:",
+        reply_markup=_edit_cancel_keyboard(app_id, page),
     )
+
+
+@router.callback_query(AdminCB.filter(F.action == "edit_cancel"))
+async def on_edit_cancel(
+    call: CallbackQuery, callback_data: AdminCB, state: FSMContext, session: AsyncSession
+) -> None:
+    if not await owner_gate(call):
+        return
+    if not _guard(call):
+        await call.answer("⛔", show_alert=True)
+        return
+    await state.clear()
+    await on_app_manage(call, callback_data, session)
 
 
 @router.message(EditAppStates.waiting_value)
@@ -465,7 +497,15 @@ async def on_edit_value(
         )
     await repo.update_application(session, app)
     await state.clear()
-    await message.answer("✅ تم حفظ التعديل.", reply_markup=back_to_menu_keyboard())
+    await message.answer(
+        "✅ تم حفظ التعديل بنجاح. يمكنك متابعة إدارة التطبيق من هنا.",
+        reply_markup=app_manage_keyboard(
+            app.id,
+            app.active,
+            data.get("page", 0),
+            website_url=website_app_url(app.id) if app.published else None,
+        ),
+    )
 
 
 # ---------------------------------------------------------------- النشر بالقناة
