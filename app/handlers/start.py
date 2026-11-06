@@ -126,10 +126,11 @@ async def on_main_menu(call: CallbackQuery, bot: Bot, state: FSMContext) -> None
         return
 
     await call.answer()
-    await call.message.answer(
-        WELCOME_TEXT,
-        reply_markup=main_menu_keyboard(is_admin_user=is_admin(call.from_user.id)),
-    )
+    keyboard = main_menu_keyboard(is_admin_user=is_admin(call.from_user.id))
+    try:
+        await call.message.edit_text(WELCOME_TEXT, reply_markup=keyboard)
+    except Exception:
+        await call.message.answer(WELCOME_TEXT, reply_markup=keyboard)
 
 
 @router.callback_query(MainMenuCB.filter(F.action == "channel"))
