@@ -3,6 +3,10 @@ from types import SimpleNamespace
 from app.keyboards import user
 
 
+def _buttons(keyboard):
+    return [button for row in keyboard.inline_keyboard for button in row]
+
+
 def test_channel_links_keyboard_shows_only_channel(monkeypatch):
     monkeypatch.setattr(
         user, "get_settings",
@@ -11,10 +15,10 @@ def test_channel_links_keyboard_shows_only_channel(monkeypatch):
 
     keyboard = user.channel_group_links_keyboard(include_channel=True, include_group=False)
 
-    buttons = [button for row in keyboard.inline_keyboard for button in row]
-    assert [(button.text, button.url) for button in buttons] == [
-        ("📢 القناة", "https://t.me/Waleed_Zone")
-    ]
+    buttons = _buttons(keyboard)
+    links = [(button.text, button.url) for button in buttons if button.url]
+    assert links == [("📢 القناة", "https://t.me/Waleed_Zone")]
+    assert any(button.text == "🏠 القائمة" and button.callback_data for button in buttons)
 
 
 def test_group_links_keyboard_shows_only_group(monkeypatch):
@@ -25,10 +29,10 @@ def test_group_links_keyboard_shows_only_group(monkeypatch):
 
     keyboard = user.channel_group_links_keyboard(include_channel=False, include_group=True)
 
-    buttons = [button for row in keyboard.inline_keyboard for button in row]
-    assert [(button.text, button.url) for button in buttons] == [
-        ("💬 المجموعة", "https://t.me/Waleed_Zone_Group")
-    ]
+    buttons = _buttons(keyboard)
+    links = [(button.text, button.url) for button in buttons if button.url]
+    assert links == [("💬 المجموعة", "https://t.me/Waleed_Zone_Group")]
+    assert any(button.text == "🏠 القائمة" and button.callback_data for button in buttons)
 
 
 def test_channel_group_links_keyboard_keeps_both_by_default(monkeypatch):
@@ -39,5 +43,5 @@ def test_channel_group_links_keyboard_keeps_both_by_default(monkeypatch):
 
     keyboard = user.channel_group_links_keyboard()
 
-    buttons = [button for row in keyboard.inline_keyboard for button in row]
+    buttons = _buttons(keyboard)
     assert [button.text for button in buttons] == ["📢 القناة", "💬 المجموعة", "🏠 القائمة"]
