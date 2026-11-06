@@ -24,7 +24,7 @@ from app.utils.catalog import (
     visible_categories,
 )
 from app.utils.constants import AppCB, AppsCB, FavsCB, LatestCB
-from app.utils.helpers import paginate
+from app.utils.helpers import is_admin, paginate
 from app.utils.versions import latest_per_family, sort_application_versions
 from app.utils.text import escape_html
 from database import repositories as repo
