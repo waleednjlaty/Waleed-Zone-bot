@@ -146,7 +146,7 @@ async def on_previous_versions(call: CallbackQuery, callback_data: AppCB, sessio
         )
     ])
     text = (
-        f"📚 إصدارات {escape_html(releases[0].name or 'التطبيق')}\\n"
+        f"📚 إصدارات {escape_html(releases[0].name or 'التطبيق')}\n"
         "اختر الإصدار المطلوب. الإصدارات الأحدث تظهر أولًا:"
     )
     keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
@@ -186,7 +186,12 @@ async def on_toggle_favorite(call: CallbackQuery, callback_data: AppCB, session:
         await repo.remove_favorite(session, call.from_user.id, app.id)
         msg = "💔 أُزيل من المفضلة"
     await call.answer(msg)
-    kb = app_detail_keyboard(app.id, is_fav=callback_data.action == "fav", steamrip_url=app.source_url)
+    kb = app_detail_keyboard(
+        app.id,
+        is_fav=callback_data.action == "fav",
+        is_admin_user=is_admin(call.from_user.id),
+        steamrip_url=app.source_url,
+    )
     releases = await repo.list_application_versions(session, app.id)
     if len(releases) > 1:
         kb.inline_keyboard.insert(1, [InlineKeyboardButton(text="📚 الإصدارات السابقة", callback_data=AppCB(action="versions", app_id=app.id).pack())])
