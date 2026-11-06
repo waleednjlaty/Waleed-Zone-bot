@@ -87,6 +87,8 @@ def app_card(app: Application, *, short: bool = False) -> str:
         lines.append(f"📥 التحميلات: {app.downloads}")
     if not short and app.description:
         lines += ["", "📝 الوصف:", "", bounded_html(app.description, 1600)]
+    if not any((app.version, app.size, app.platform, category, app.developer, app.downloads, app.description)):
+        lines += ["", "ℹ️ لم تُضف تفاصيل إضافية لهذا التطبيق بعد."]
 
     return append_app_footer("\n".join(lines))
 
