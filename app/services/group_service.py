@@ -358,7 +358,7 @@ class GroupService:
             await message.delete()
             return "🔒 تم قفل المجموعة (منع الأعضاء من الكتابة)."
         except Exception:
-            return "❌ تعذر قفل المجموعة."
+            return "❌ تعذّر قفل المجموعة. تحقّق من أن البوت مشرف ويملك صلاحية تغيير أذونات المجموعة."
 
     async def unlock_chat(self, bot: Bot, message: Message) -> str:
         try:
