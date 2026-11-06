@@ -144,7 +144,7 @@ async def on_request_status(
         }[new_status]
         await call.answer(status_text)
         await call.message.edit_text(
-            f"{request_summary(req, callback_data.req_id)}\\n\\n{status_text}",
+            f"{request_summary(req, callback_data.req_id)}\n\n{status_text}",
             reply_markup=request_manage_keyboard(req.id),
         )
         return
