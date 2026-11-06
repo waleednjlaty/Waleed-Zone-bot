@@ -26,6 +26,7 @@ from app.keyboards.admin import (
     publish_select_keyboard,
     requests_keyboard,
     settings_keyboard,
+    toggle_confirm_keyboard,
     welcome_settings_keyboard,
 )
 from app.keyboards.user import back_to_menu_keyboard
@@ -282,20 +283,42 @@ async def on_toggle_app(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
-    await call.answer()
     app = await repo.get_application(session, callback_data.app_id)
     if app is None:
-        await call.answer("التطبيق غير موجود.", show_alert=True)
+        await call.answer("التطبيق غير موجود أو حُذف.", show_alert=True)
         return
-    new_active = not app.active
-    await repo.set_application_active(session, app.id, new_active)
+
+    target_active = not app.active
+    action_label = "تفعيل" if target_active else "تعطيل"
+    status_label = "مفعّل" if target_active else "معطّل"
+    await call.answer()
     await call.message.edit_text(
-        f"{(await repo.get_application(session, app.id)).name} → "
-        f"{'✅ مفعّل' if new_active else '🚫 معطّل'}",
-        reply_markup=app_manage_keyboard(
-            app.id, new_active, callback_data.page
-        ),
+        f"⚠️ هل تريد {action_label} التطبيق «{escape_html(app.name)}»؟\n"
+        f"حالته الحالية: {'مفعّل' if app.active else 'معطّل'}\n"
+        f"بعد التأكيد ستصبح حالته: {status_label}.",
+        reply_markup=toggle_confirm_keyboard(app.id, callback_data.page, target_active),
     )
+
+
+@router.callback_query(AdminCB.filter(F.action.in_({"toggle_apply_on", "toggle_apply_off"})))
+async def on_toggle_apply(
+    call: CallbackQuery, callback_data: AdminCB, session: AsyncSession
+) -> None:
+    if not await owner_gate(call):
+        return
+    if not _guard(call):
+        await call.answer("⛔", show_alert=True)
+        return
+    app = await repo.get_application(session, callback_data.app_id)
+    if app is None:
+        await call.answer("التطبيق غير موجود أو حُذف.", show_alert=True)
+        return
+
+    target_active = callback_data.action == "toggle_apply_on"
+    if app.active != target_active:
+        await repo.set_application_active(session, app.id, target_active)
+    # Re-render the canonical management view. Repeated/stale confirmations are idempotent.
+    await on_app_manage(call, callback_data, session)
 
 
 # ---------------------------------------------------------------- تعديل تطبيق
