@@ -284,11 +284,13 @@ def force_subscribe_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
-def channel_group_links_keyboard() -> InlineKeyboardMarkup:
+def channel_group_links_keyboard(
+    *, include_channel: bool = True, include_group: bool = True
+) -> InlineKeyboardMarkup:
     settings = get_settings()
     kb: list[list[InlineKeyboardButton]] = []
-    channel_url = _telegram_link(settings.CHANNEL_USERNAME)
-    group_url = _telegram_link(settings.GROUP_USERNAME)
+    channel_url = _telegram_link(settings.CHANNEL_USERNAME) if include_channel else None
+    group_url = _telegram_link(settings.GROUP_USERNAME) if include_group else None
     if channel_url:
         kb.append([InlineKeyboardButton(text="📢 القناة", url=channel_url)])
     if group_url:

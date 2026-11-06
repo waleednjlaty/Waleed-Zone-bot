@@ -149,7 +149,7 @@ async def on_channel(call: CallbackQuery) -> None:
     await call.answer()
     await call.message.answer(
         "📢 قناتنا الرسمية:\nتابعنا ليصلك كل جديد.",
-        reply_markup=channel_group_links_keyboard(),
+        reply_markup=channel_group_links_keyboard(include_channel=True, include_group=False),
     )
 
 
@@ -158,7 +158,7 @@ async def on_group(call: CallbackQuery) -> None:
     await call.answer()
     await call.message.answer(
         "💬 مجموعتنا الرسمية:\nانضم للمناقشات وطلبات التطبيقات.",
-        reply_markup=channel_group_links_keyboard(),
+        reply_markup=channel_group_links_keyboard(include_channel=False, include_group=True),
     )
 
 
