@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import Bot, F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.filters import CommandStart, Command  # تمت إضافة Command هنا
 from aiogram.types import CallbackQuery, Message, FSInputFile  # تمت إضافة FSInputFile هنا
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,7 +55,8 @@ HELP_TEXT = (
 )
 
 @router.message(CommandStart(), F.chat.type == "private")
-async def on_start(message: Message, session: AsyncSession, bot: Bot) -> None:
+async def on_start(message: Message, session: AsyncSession, bot: Bot, state: FSMContext) -> None:
+    await state.clear()
     if not await require_subscription(message, bot):
         return
     """بداية البوت — يدعم deep link: t.me/BOT?start=app_123 أو dl_TOKEN"""
@@ -118,15 +120,17 @@ async def on_start(message: Message, session: AsyncSession, bot: Bot) -> None:
     )
 
 @router.callback_query(MainMenuCB.filter(F.action == "main"))
-async def on_main_menu(call: CallbackQuery, bot: Bot) -> None:
+async def on_main_menu(call: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+    await state.clear()
     if not await require_subscription(call, bot):
         return
 
     await call.answer()
-    await call.message.answer(
-        WELCOME_TEXT,
-        reply_markup=main_menu_keyboard(is_admin_user=is_admin(call.from_user.id)),
-    )
+    keyboard = main_menu_keyboard(is_admin_user=is_admin(call.from_user.id))
+    try:
+        await call.message.edit_text(WELCOME_TEXT, reply_markup=keyboard)
+    except Exception:
+        await call.message.answer(WELCOME_TEXT, reply_markup=keyboard)
 
 
 @router.callback_query(MainMenuCB.filter(F.action == "channel"))
