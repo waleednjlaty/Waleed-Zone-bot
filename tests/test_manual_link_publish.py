@@ -62,4 +62,4 @@ def test_attachment_success_keyboard_offers_clear_admin_next_steps():
         "📱 إدارة التطبيقات",
     ]
     assert buttons[0].callback_data == "admin:app_manage:42:0"
-    assert buttons[1].callback_data == "admin:apps:0"
+    assert buttons[1].callback_data == "admin:apps:0:0"
