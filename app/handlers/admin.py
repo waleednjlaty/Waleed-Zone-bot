@@ -271,10 +271,16 @@ async def on_delete_yes(
         return
     app = await repo.get_application(session, callback_data.app_id)
     if app is None:
-        await call.answer("التطبيق غير موجود أو تمت أرشفته مسبقًا.", show_alert=True)
+        await call.answer("التطبيق غير موجود أو ربما أُرشف مسبقًا.", show_alert=True)
+        return
+    if not app.active and not app.published:
+        await call.answer("التطبيق معطّل وغير منشور بالفعل.", show_alert=True)
         return
 
-    await repo.archive_application(session, callback_data.app_id)
+    archived = await repo.archive_application(session, callback_data.app_id)
+    if not archived:
+        await call.answer("تعذّرت الأرشفة: لم يعد التطبيق موجودًا. حدّث القائمة وحاول مجددًا.", show_alert=True)
+        return
     await call.answer("🗑 تمت أرشفة التطبيق بنجاح.")
 
     apps = await repo.list_applications(
@@ -283,9 +289,9 @@ async def on_delete_yes(
     page, total_pages = paginate(len(apps), callback_data.page, PER_PAGE)
     chunk = apps[page * PER_PAGE : (page + 1) * PER_PAGE]
     text = (
-        "📱 إدارة التطبيقات\\n"
-        f"📦 التطبيقات المحمّلة: {len(apps)} · الصفحة {page + 1}/{total_pages}\\n"
-        "────────────\\n"
+        "📱 إدارة التطبيقات\n"
+        f"📦 التطبيقات المحمّلة: {len(apps)} · الصفحة {page + 1}/{total_pages}\n"
+        "────────────\n"
     )
     if not chunk:
         text += "لا توجد تطبيقات في المكتبة بعد. يمكنك رفع ملف أو إضافة تطبيق برابط من الأزرار أدناه."
