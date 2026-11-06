@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 router = Router(name="requests")
 
 
+def _request_status_unchanged(current_status: str, requested_status: str) -> bool:
+    """Return whether a status callback repeats the request's current state."""
+    return current_status == requested_status
+
+
 @router.callback_query(ReqCB.filter(F.action == "start"))
 async def on_request_start(call: CallbackQuery, state: FSMContext) -> None:
     await call.answer()
@@ -126,9 +131,27 @@ async def on_request_status(
         "reject": "rejected",
     }
     new_status = status_map[callback_data.action]
+    req = await repo.get_app_request(session, callback_data.req_id)
+    if req is None:
+        await call.answer("الطلب غير موجود أو حُذف.", show_alert=True)
+        return
+
+    if _request_status_unchanged(req.status, new_status):
+        status_text = {
+            "completed": "✅ الطلب منفَّذ مسبقًا",
+            "processing": "⏳ الطلب قيد المعالجة بالفعل",
+            "rejected": "❌ الطلب مرفوض مسبقًا",
+        }[new_status]
+        await call.answer(status_text)
+        await call.message.edit_text(
+            f"{request_summary(req, callback_data.req_id)}\n\n{status_text}",
+            reply_markup=request_manage_keyboard(req.id),
+        )
+        return
+
     req = await repo.set_request_status(session, callback_data.req_id, new_status)
     if req is None:
-        await call.answer("الطلب غير موجود.", show_alert=True)
+        await call.answer("تعذّر تحديث الطلب. ربما حُذف للتو.", show_alert=True)
         return
 
     status_text = {
