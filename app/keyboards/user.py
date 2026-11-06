@@ -57,7 +57,7 @@ def main_menu_keyboard(*, is_admin_user: bool = False) -> InlineKeyboardMarkup:
         
             InlineKeyboardButton(text="🔎 بحث عن تطبيق", callback_data=SearchCB(action="start").pack()),
         ],
-       # [InlineKeyboardButton(text="❤️ تطبيقاتي المفضلة", callback_data=FavsCB(page=0).pack())],
+        [InlineKeyboardButton(text="❤️ تطبيقاتي المفضلة", callback_data=FavsCB(page=0).pack())],
         [InlineKeyboardButton(text="📥 طلب تطبيق", callback_data=ReqCB(action="start", req_id=0).pack())],
         [
             InlineKeyboardButton(text="📢 القناة", callback_data=MainMenuCB(action="channel").pack()),
@@ -203,19 +203,14 @@ def app_detail_keyboard(
                 release_row = []
         if release_row:
             kb.append(release_row)
-   # kb.append(
-    
-    #    [
-     ##       InlineKeyboardButton(
-            #    text="💔 إزالة من المفضلة" if is_fav else "❤️ إضافة للمفضلة",
-           #     callback_data=AppCB(action="unfav" if is_fav else "fav", app_id=app_id).pack(),
-          #  ),
-         #   InlineKeyboardButton(
-        #        text="🔔 إشعارات",
-       #         callback_data=NotifCB(enabled=1).pack(),
-      #      ),
-     #   ]
-    #)
+    kb.append(
+        [
+            InlineKeyboardButton(
+                text="💔 إزالة من المفضلة" if is_fav else "❤️ إضافة للمفضلة",
+                callback_data=AppCB(action="unfav" if is_fav else "fav", app_id=app_id).pack(),
+            ),
+        ]
+    )
     if is_admin_user:
         kb.append(
             [InlineKeyboardButton(
