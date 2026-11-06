@@ -108,6 +108,37 @@ async def resolve_application_download(session: AsyncSession, application_id: in
     return current, url, provider
 
 
+def _website_fallback_keyboard(application_id: int) -> InlineKeyboardMarkup | None:
+    """Offer the configured website route as a clear fallback without exposing raw URLs."""
+    web_url = website_download_url(application_id)
+    if not web_url:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="🌐 فتح صفحة التحميل بالموقع", url=web_url)
+    ]])
+
+
+def _download_error_message(code: str) -> str:
+    """Translate internal resolver failures into actionable, user-safe Arabic copy."""
+    messages = {
+        "SOURCE_REMOVED": "هذا التطبيق لم يعد متاحًا للتحميل.",
+        "SOURCE_CHANGED": "تغيّر مصدر التحميل أثناء تجهيز الطلب. افتح صفحة التطبيق وحاول مجددًا.",
+        "MISSING_HX_REDIRECT": "المصدر لم يوفّر رابط الملف. جرّب صفحة التحميل بالموقع.",
+        "FINAL_DESTINATION_NOT_FILE": "المصدر أعاد صفحة ويب بدل ملف التحميل. جرّب صفحة التحميل بالموقع.",
+        "BZZHR_NOT_FOUND": "لم نعثر على رابط تحميل صالح لدى المصدر حاليًا.",
+        "PROVIDER_UNAVAILABLE": "خادم التحميل غير متاح مؤقتًا.",
+        "PROVIDER_LOGIN_REQUIRED": "المصدر يطلب تسجيل الدخول قبل إتاحة الملف.",
+        "PROVIDER_RATE_LIMITED": "طلبات التحميل كثيرة حاليًا. انتظر قليلًا ثم أعد المحاولة.",
+        "PROVIDER_FORBIDDEN": "المصدر رفض طلب التحميل حاليًا.",
+        "PROVIDER_CHALLENGE": "المصدر يطلب تحققًا بشريًا لإكمال التحميل.",
+    }
+    return messages.get(code, "تعذّر تجهيز التحميل حاليًا. حاول مرة أخرى بعد قليل.")
+
+
+async def _send_download_fallback(call, application_id: int, message: str) -> None:
+    await call.message.answer(message, reply_markup=_website_fallback_keyboard(application_id))
+
+
 async def send_application_download(call, session: AsyncSession, application_id: int, *, edit=False):
     from app.utils.text import final_download_message
     key = (call.from_user.id, application_id)
@@ -165,15 +196,22 @@ async def send_application_download(call, session: AsyncSession, application_id:
             await call.message.answer(msg_text, reply_markup=kb)
             return
 
-        messages = {
-            "SOURCE_REMOVED": "ملف المصدر محذوف أو لم يعد متاحًا.",
-            "MISSING_HX_REDIRECT": "المصدر لم يُرجع رابط الملف بعد طلب التنزيل.",
-            "FINAL_DESTINATION_NOT_FILE": "خادم المصدر أعاد صفحة بدل ملف قابل للتنزيل.",
-        }
-        await call.message.answer(messages.get(error.code, "تعذر تجهيز مصدر التحميل. أعد المحاولة لاحقًا.") + "\n" + (website_download_url(application_id) or ""))
-    except (ValueError, TimeoutError):
+        await _send_download_fallback(
+            call,
+            application_id,
+            _download_error_message(error.code) + "\n\nيمكنك تجربة صفحة التحميل البديلة من الزر أدناه.",
+        )
+    except (ValueError, TimeoutError) as error:
         await session.rollback()
-        await call.message.answer("تعذر تجهيز الرابط حاليًا. قد يكون المصدر تغيّر؛ افتح صفحة التحميل في Waleed Zone أو أعد المحاولة لاحقًا.\n" + (website_download_url(application_id) or ""))
+        code = str(error) if isinstance(error, ValueError) else "TIMEOUT"
+        message = _download_error_message(code)
+        if code == "TIMEOUT":
+            message = "استغرق تجهيز التحميل وقتًا أطول من المتوقع. حاول مجددًا بعد قليل."
+        await _send_download_fallback(
+            call,
+            application_id,
+            message + "\n\nيمكنك تجربة صفحة التحميل البديلة من الزر أدناه.",
+        )
     except Exception:
         await session.rollback()
         logger.warning("download failed application_id=%s category=unavailable", application_id)
