@@ -18,7 +18,7 @@ def source():
 
 
 def test_download_url_stable():
-    assert website_download_url(123)=='https://waleed-zone.up.railway.app/download/123'
+    assert website_download_url(123, 'https://www.waleedzone.xyz')=='https://www.waleedzone.xyz/download/123'
     assert website_download_url(0) is None
     assert website_download_url(123,'https://example.test/evil') is None
 
@@ -132,7 +132,7 @@ def test_channel_publishing_download_cta_is_website():
     app=SimpleNamespace(id=123,name='App <test> & title',version='1',size='24 B',description='Test')
     text,kb=channel_promo(app)
     assert kb is None
-    assert '<a href="https://waleed-zone.up.railway.app/download/123">' in text
+    assert f'<a href="{website_download_url(123)}">' in text
     assert '🟢 اضغط هنا لبدء التحميل الآن 🟢' in text
     assert 'App &lt;test&gt; &amp; title' in text
     assert 'devuploads' not in text and 'shrinkme' not in text and 't.me/' not in text
