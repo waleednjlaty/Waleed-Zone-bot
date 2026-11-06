@@ -383,7 +383,7 @@ async def on_edit_app(
     )
 
 
-@router.callback_query(F.data.startswith("editfield:"), EditAppStates.choosing_field)
+@router.callback_query(F.data.startswith("editfield:"))
 async def on_edit_field(
     call: CallbackQuery, state: FSMContext
 ) -> None:
@@ -391,6 +391,9 @@ async def on_edit_field(
         return
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
+        return
+    if await state.get_state() != EditAppStates.choosing_field.state:
+        await call.answer("انتهت صلاحية هذه القائمة. افتح تعديل التطبيق مجددًا.", show_alert=True)
         return
     field = call.data.split(":", 1)[1]
     if field not in FIELD_LABELS or field == "name":
