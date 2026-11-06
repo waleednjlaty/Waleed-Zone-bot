@@ -40,6 +40,9 @@ async def on_search_query(
     if not query:
         await message.answer("🔎 اكتب اسم التطبيق أولًا.")
         return
+    if len(query) > 80:
+        await message.answer("⚠️ عبارة البحث طويلة. اختصرها إلى 80 حرفًا كحد أقصى.")
+        return
 
     normalized = normalize_text(query)
     apps = await repo.search_applications(session, normalized, limit=10)
@@ -66,7 +69,10 @@ async def on_search_query(
     for i, app in enumerate(apps, start=1):
         lines.append(f"{i}. {escape_html(app.name)}")
         kb_rows.append(
-            [InlineKeyboardButton(text=f"{i}. {app.name}", callback_data=AppCB(action="open", app_id=app.id).pack())]
+            [InlineKeyboardButton(
+                text=f"{i}. {str(app.name or 'تطبيق')[:55]}",
+                callback_data=AppCB(action="open", app_id=app.id).pack(),
+            )]
         )
     kb_rows.append(
         [
