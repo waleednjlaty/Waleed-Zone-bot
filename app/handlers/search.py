@@ -38,7 +38,10 @@ async def on_search_query(
 ) -> None:
     query = (message.text or "").strip()
     if not query:
-        await message.answer("🔎 اكتب اسم التطبيق أولًا.")
+        await message.answer(
+            "🔎 أرسل اسم التطبيق أو اللعبة كنص، وليس صورة أو ملفًا.\n"
+            "مثال: CapCut أو فوتوشوب."
+        )
         return
     if len(query) > 80:
         await message.answer("⚠️ عبارة البحث طويلة. اختصرها إلى 80 حرفًا كحد أقصى.")
@@ -53,13 +56,14 @@ async def on_search_query(
     if not apps:
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="🔎 بحث جديد", callback_data=SearchCB(action="start").pack())],
+                [InlineKeyboardButton(text="✏️ تعديل عبارة البحث", callback_data=SearchCB(action="start").pack())],
                 [InlineKeyboardButton(text="🏠 القائمة", callback_data=MainMenuCB(action="main").pack())],
             ]
         )
         await message.answer(
             f"❌ لم أجد تطبيقًا باسم «{escape_html(query)}».\n"
-            "جرّب كتابة الاسم بالعربية أو الإنجليزية، أو استخدم كلمة أقصر من اسم التطبيق.",
+            "جرّب تهجئة مختلفة للاسم، أو اكتبه بالعربية أو الإنجليزية، أو استخدم جزءًا من الاسم.\n"
+            "يمكنك تعديل عبارة البحث مباشرة من الزر أدناه.",
             reply_markup=kb,
         )
         return
@@ -67,6 +71,7 @@ async def on_search_query(
     lines = [
         f"🔎 نتائج البحث عن «{escape_html(query)}»:",
         f"📦 عُثر على {len(apps)} نتيجة (نعرض أفضل 10 نتائج).",
+        "💡 لم تجد ما تبحث عنه؟ يمكنك تعديل عبارة البحث.",
         "",
     ]
     kb_rows: list[list[InlineKeyboardButton]] = []
@@ -80,7 +85,7 @@ async def on_search_query(
         )
     kb_rows.append(
         [
-            InlineKeyboardButton(text="🔎 بحث جديد", callback_data=SearchCB(action="start").pack()),
+            InlineKeyboardButton(text="✏️ تعديل البحث", callback_data=SearchCB(action="start").pack()),
             InlineKeyboardButton(text="🏠 القائمة", callback_data=MainMenuCB(action="main").pack()),
         ]
     )
