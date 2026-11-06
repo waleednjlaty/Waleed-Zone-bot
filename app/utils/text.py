@@ -111,7 +111,12 @@ def search_prompt() -> str:
 
 
 def request_prompt() -> str:
-    return "📱 اكتب اسم التطبيق الذي تريد أن نضيفه.\n\nمثال: Photoshop Android"
+    return (
+        "📥 طلب إضافة تطبيق جديد\n\n"
+        "اكتب اسم التطبيق أو اللعبة التي تريد إضافتها كنص.\n"
+        "مثال: CapCut Pro أو Photoshop Android\n\n"
+        "يمكنك إلغاء الطلب والعودة للقائمة الرئيسية في أي وقت."
+    )
 
 
 def maintenance_message() -> str:
