@@ -115,9 +115,13 @@ async def on_requests_list(
     requests = await repo.list_requests(session, status=None, limit=100)
     page, total_pages = paginate(len(requests), callback_data.page, PER_PAGE_REQUESTS)
     chunk = requests[page * PER_PAGE_REQUESTS : (page + 1) * PER_PAGE_REQUESTS]
-    text = "📥 طلبات التطبيقات\n────────────\n"
+    text = (
+        "📥 طلبات التطبيقات\n"
+        f"📦 الطلبات المحمّلة: {len(requests)} · الصفحة {page + 1}/{total_pages}\n"
+        "────────────\n"
+    )
     if not chunk:
-        text += "لا توجد طلبات بعد."
+        text += "لا توجد طلبات حاليًا. ستظهر هنا طلبات المستخدمين الجديدة."
     await call.message.edit_text(
         text, reply_markup=requests_keyboard(chunk, page, total_pages)
     )
@@ -137,9 +141,13 @@ async def on_apps_management(
     apps = await repo.list_applications(session, active_only=False, public_only=False, limit=200)
     page, total_pages = paginate(len(apps), callback_data.page, PER_PAGE)
     chunk = apps[page * PER_PAGE : (page + 1) * PER_PAGE]
-    text = "📱 إدارة التطبيقات\n────────────\n"
+    text = (
+        "📱 إدارة التطبيقات\n"
+        f"📦 التطبيقات المحمّلة: {len(apps)} · الصفحة {page + 1}/{total_pages}\n"
+        "────────────\n"
+    )
     if not chunk:
-        text += "لا توجد تطبيقات."
+        text += "لا توجد تطبيقات في المكتبة بعد. يمكنك رفع ملف أو إضافة تطبيق برابط من الأزرار أدناه."
     await call.message.edit_text(
         text, reply_markup=apps_management_keyboard(chunk, page, total_pages)
     )
@@ -154,11 +162,11 @@ async def on_app_manage(
     if not _guard(call):
         await call.answer("⛔", show_alert=True)
         return
-    await call.answer()
     app = await repo.get_application(session, callback_data.app_id)
     if app is None:
-        await call.answer("التطبيق غير موجود.", show_alert=True)
+        await call.answer("التطبيق غير موجود أو حُذف.", show_alert=True)
         return
+    await call.answer()
     versions = await repo.list_application_versions(session, app.id)
     release_summary = "\n\n📚 إصدارات هذا التطبيق:\n" + "\n".join(
         f"{'🟢' if release.id == app.id else '▫️'} {escape_html(release.version or 'إصدار غير محدد')} · {escape_html(release.platform or 'نظام غير محدد')} · #{release.id}"
